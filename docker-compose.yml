@@ -52,7 +52,8 @@ services:
       - TRANSFORMERS_CACHE=/data/models/huggingface
       - MARKER_MODELS_DIR=/data/models/marker
       - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-}
-      - ROCR_VISIBLE_DEVICES=${ROCR_VISIBLE_DEVICES:-0}
+      - ROCR_VISIBLE_DEVICES=
+      - HIP_VISIBLE_DEVICES=-1
     volumes:
       - ./volumes/input:/data/input
       - ./volumes/output:/data/output
