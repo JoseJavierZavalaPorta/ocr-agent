@@ -1,0 +1,125 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ocr-backend
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_URL=http://ollama:11434
+      - DATABASE_URL=sqlite:////data/db/ocr.db
+      - INPUT_PATH=/data/input
+      - OUTPUT_PATH=/data/output
+      - ORIGINALS_PATH=/data/originals
+      - MODELS_PATH=/data/models
+    volumes:
+      - ./volumes/input:/data/input
+      - ./volumes/output:/data/output
+      - ./volumes/originals:/data/originals
+      - ./volumes/db:/data/db
+      - ./volumes/models:/data/models
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ocr-worker
+    command: celery -A celery_worker worker --loglevel=info --concurrency=2 -Q ocr --prefetch-multiplier=1
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_URL=http://ollama:11434
+      - DATABASE_URL=sqlite:////data/db/ocr.db
+      - INPUT_PATH=/data/input
+      - OUTPUT_PATH=/data/output
+      - ORIGINALS_PATH=/data/originals
+      - MODELS_PATH=/data/models
+      - HF_HOME=/data/models/huggingface
+      - TORCH_HOME=/data/models/torch
+      - TRANSFORMERS_CACHE=/data/models/huggingface
+      - MARKER_MODELS_DIR=/data/models/marker
+      - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-}
+      - ROCR_VISIBLE_DEVICES=${ROCR_VISIBLE_DEVICES:-0}
+    volumes:
+      - ./volumes/input:/data/input
+      - ./volumes/output:/data/output
+      - ./volumes/originals:/data/originals
+      - ./volumes/db:/data/db
+      - ./volumes/models:/data/models
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+      - render
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    ipc: host
+    shm_size: '4gb'
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ocr-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: ocr-redis
+    command: redis-server --appendonly yes --appendfilename dump.aof --save 60 1
+    volumes:
+      - ./volumes/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:rocm
+    container_name: ocr-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./volumes/models/ollama:/root/.ollama
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+      - render
+    environment:
+      - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-}
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_MAX_LOADED_MODELS=2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 60s

@@ -1,0 +1,62 @@
+# Web framework
+fastapi==0.111.1
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+websockets==12.0
+
+# Task queue
+celery[redis]==5.4.0
+redis==5.0.8
+flower==2.0.1
+
+# Database
+sqlalchemy==2.0.31
+alembic==1.13.2
+
+# Configuration
+pydantic-settings==2.4.0
+pydantic==2.8.2
+
+# PDF processing
+PyMuPDF==1.24.9
+pypdf==4.3.1
+
+# Image processing
+Pillow==10.4.0
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+scikit-image==0.23.2
+imutils==0.5.4
+
+# OCR — Surya (motor principal, PyTorch ROCm compatible)
+surya-ocr==0.6.3
+marker-pdf==0.3.10
+
+# OCR — TrOCR (manuscritos, HuggingFace Transformers)
+transformers==4.44.2
+huggingface-hub==0.24.6
+accelerate==0.33.0
+safetensors==0.4.4
+sentencepiece==0.2.0
+tokenizers==0.19.1
+
+# MinerU (tablas complejas, fallback CPU)
+magic-pdf[full]==1.1.1
+
+# Ollama client (corrección LLM)
+ollama==0.3.3
+
+# HTTP client
+httpx==0.27.2
+aiofiles==24.1.0
+aiohttp==3.10.5
+
+# File monitoring
+watchdog==5.0.0
+
+# Utilities
+loguru==0.7.2
+python-magic==0.4.27
+python-slugify==8.0.4
+tqdm==4.66.5
+tenacity==9.0.0
