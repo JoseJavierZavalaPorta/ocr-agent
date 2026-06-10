@@ -1,10 +1,14 @@
-FROM rocm/pytorch:rocm6.2_ubuntu22.04_py3.10_pytorch_2.3.0
+FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 \
+    python3.10-dev \
+    python3-pip \
     tesseract-ocr \
     tesseract-ocr-spa \
     tesseract-ocr-eng \
@@ -20,19 +24,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     git \
     build-essential \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+RUN python3 -m pip install --upgrade pip setuptools wheel
+
+# Instalar PyTorch ROCm PRIMERO para que las demás deps no lo sobreescriban con CUDA
+# Wheels oficiales de AMD/PyTorch para ROCm 6.1 (compatible con ROCm 6.x en el host)
+RUN pip install --no-cache-dir \
+    torch==2.3.1 \
+    torchvision==0.18.1 \
+    torchaudio==2.3.1 \
+    --index-url https://download.pytorch.org/whl/rocm6.1
+
 COPY requirements.txt .
 
-# PyTorch ya viene en la imagen base con ROCm. Instalar resto de deps.
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# El resto de dependencias: pip ve torch ya instalado y no lo sobreescribe
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Puerto default para FastAPI
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--loop", "asyncio"]
