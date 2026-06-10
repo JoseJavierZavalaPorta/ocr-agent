@@ -42,7 +42,10 @@ class SuryaEngine:
         cache = f"{self.models_path}/huggingface"
         os.environ.setdefault("HF_HOME", cache)
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        # CPU por defecto: GPU AMD iGPU causa page fault al cargar modelos grandes.
+        # Activar GPU con SURYA_DEVICE=cuda si se tiene GPU discreta con suficiente VRAM.
+        requested = os.environ.get("SURYA_DEVICE", "cpu")
+        device = requested if torch.cuda.is_available() else "cpu"
         logger.info(f"Cargando Surya en device: {device}")
 
         # surya 0.6.x cambió el path del módulo de detección
