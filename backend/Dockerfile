@@ -33,11 +33,10 @@ WORKDIR /app
 RUN python3 -m pip install --upgrade pip setuptools wheel
 
 # Instalar PyTorch ROCm PRIMERO para que las demás deps no lo sobreescriban con CUDA
-# Wheels oficiales de AMD/PyTorch para ROCm 6.1 (compatible con ROCm 6.x en el host)
+# Versiones disponibles en rocm6.1: 2.4.0, 2.4.1, 2.5.0, 2.5.1, 2.6.0
 RUN pip install --no-cache-dir \
-    torch==2.3.1 \
-    torchvision==0.18.1 \
-    torchaudio==2.3.1 \
+    torch==2.5.1+rocm6.1 \
+    torchvision==0.20.1+rocm6.1 \
     --index-url https://download.pytorch.org/whl/rocm6.1
 
 COPY requirements.txt .
