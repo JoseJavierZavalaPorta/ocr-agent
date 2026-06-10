@@ -34,12 +34,13 @@ imutils==0.5.4
 marker-pdf==0.3.10
 
 # OCR — TrOCR (manuscritos, HuggingFace Transformers)
-transformers==4.44.2
-huggingface-hub==0.24.6
-accelerate==0.33.0
-safetensors==0.4.4
-sentencepiece==0.2.0
-tokenizers==0.19.1
+# Sin pins: marker-pdf declara sus propios rangos (transformers>=4.45.2, etc.)
+transformers
+huggingface-hub
+accelerate
+safetensors
+sentencepiece
+tokenizers
 
 # MinerU (tablas complejas, fallback CPU)
 magic-pdf[full]==1.1.0
