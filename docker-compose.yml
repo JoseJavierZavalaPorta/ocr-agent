@@ -63,8 +63,8 @@ services:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri
     group_add:
-      - video
-      - render
+      - "44"    # video
+      - "109"   # render
     depends_on:
       redis:
         condition: service_healthy
@@ -110,8 +110,8 @@ services:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri
     group_add:
-      - video
-      - render
+      - "44"    # video
+      - "109"   # render
     environment:
       - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-}
       - OLLAMA_KEEP_ALIVE=24h
