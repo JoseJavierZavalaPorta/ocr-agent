@@ -43,7 +43,7 @@ sentencepiece
 tokenizers
 
 # MinerU (tablas complejas, fallback CPU)
-magic-pdf[full]==1.1.0
+magic-pdf==1.1.0
 
 # Ollama client (corrección LLM)
 ollama==0.3.3
