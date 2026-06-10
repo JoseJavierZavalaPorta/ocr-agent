@@ -33,10 +33,10 @@ WORKDIR /app
 RUN python3 -m pip install --upgrade pip setuptools wheel
 
 # Instalar PyTorch ROCm PRIMERO para que las demás deps no lo sobreescriban con CUDA
-# Versiones disponibles en rocm6.1: 2.4.0, 2.4.1, 2.5.0, 2.5.1, 2.6.0
+# Sin pinear versión: pip toma la última disponible en el índice (evita hash mismatch de CDN)
 RUN pip install --no-cache-dir \
-    torch==2.5.1+rocm6.1 \
-    torchvision==0.20.1+rocm6.1 \
+    torch \
+    torchvision \
     --index-url https://download.pytorch.org/whl/rocm6.1
 
 COPY requirements.txt .
