@@ -30,7 +30,7 @@ imutils==0.5.4
 
 # OCR — Surya (motor principal, PyTorch ROCm compatible)
 # torch/torchvision NO están aquí: se instalan desde el wheel ROCm en el Dockerfile
-surya-ocr==0.6.3
+# surya-ocr: no fijar versión — marker-pdf declara su propio rango compatible
 marker-pdf==0.3.10
 
 # OCR — TrOCR (manuscritos, HuggingFace Transformers)
