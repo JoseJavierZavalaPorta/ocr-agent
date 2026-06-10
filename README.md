@@ -4,6 +4,28 @@ Sistema de procesamiento OCR offline para documentos históricos escaneados (190
 
 ---
 
+## Instalación en un comando
+
+> Máquina Ubuntu 22.04/24.04 con GPU AMD (RX 5090). Solo necesitas internet en este paso.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JoseJavierZavalaPorta/ocr-agent/main/bootstrap.sh -o bootstrap.sh
+chmod +x bootstrap.sh && ./bootstrap.sh
+```
+
+El script `bootstrap.sh` hace **todo automáticamente**:
+1. Instala Git, Docker y Docker Compose
+2. Instala el driver AMD ROCm
+3. Detecta la versión GFX de tu GPU y configura el `.env`
+4. Clona este repositorio
+5. Construye y levanta los 5 servicios Docker
+6. Descarga todos los modelos OCR (~18 GB)
+7. Deja el sistema listo en `http://localhost:3000`
+
+> El script es **reentrant**: si se interrumpe (incluyendo el reinicio obligatorio tras instalar ROCm), vuélvelo a ejecutar y continúa desde donde quedó.
+
+---
+
 ## Características
 
 - **Multi-motor inteligente**: el sistema analiza cada página y elige automáticamente el mejor motor OCR
@@ -30,7 +52,9 @@ Sistema de procesamiento OCR offline para documentos históricos escaneados (190
 
 ---
 
-## Despliegue paso a paso
+## Despliegue paso a paso (manual)
+
+> Si usaste `bootstrap.sh` arriba, puedes saltarte toda esta sección.
 
 ### Paso 1 — Instalar driver AMD ROCm
 
