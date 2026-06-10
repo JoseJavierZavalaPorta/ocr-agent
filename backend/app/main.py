@@ -91,6 +91,11 @@ app.add_middleware(
 app.include_router(router, prefix="/api")
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
