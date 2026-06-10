@@ -38,15 +38,24 @@ class SuryaEngine:
         if self._loaded:
             return
         import torch
-        from surya.model.detection.segformer import load_model as load_det, load_processor as load_det_proc
-        from surya.model.recognition.model import load_model as load_rec
-        from surya.model.recognition.processor import load_processor as load_rec_proc
 
         cache = f"{self.models_path}/huggingface"
         os.environ.setdefault("HF_HOME", cache)
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"Cargando Surya en device: {device}")
+
+        # surya 0.6.x cambió el path del módulo de detección
+        try:
+            from surya.model.detection.segformer import load_model as load_det, load_processor as load_det_proc
+        except ImportError:
+            try:
+                from surya.model.detection.model import load_model as load_det, load_processor as load_det_proc
+            except ImportError:
+                from surya.model.detection import load_model as load_det, load_processor as load_det_proc
+
+        from surya.model.recognition.model import load_model as load_rec
+        from surya.model.recognition.processor import load_processor as load_rec_proc
 
         self._det_processor = load_det_proc()
         self._det_model = load_det().to(device)
@@ -98,18 +107,27 @@ class TrOCREngine:
         from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
         cache = f"{self.models_path}/huggingface"
-        self._device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Usar CPU por defecto: la GPU AMD/ROCm causa page faults con TrOCR
+        # en configuraciones con iGPU. Activar con TROCR_DEVICE=cuda si se desea.
+        requested = os.environ.get("TROCR_DEVICE", "cpu")
+        self._device = requested if torch.cuda.is_available() else "cpu"
         logger.info(f"Cargando TrOCR en device: {self._device}")
 
         self._processor = TrOCRProcessor.from_pretrained(
             "microsoft/trocr-large-handwritten", cache_dir=cache
         )
-        self._model = VisionEncoderDecoderModel.from_pretrained(
+        model = VisionEncoderDecoderModel.from_pretrained(
             "microsoft/trocr-large-handwritten", cache_dir=cache
-        ).to(self._device)
+        )
+        try:
+            self._model = model.to(self._device)
+        except Exception as e:
+            logger.warning(f"No se pudo mover TrOCR a {self._device}: {e}. Usando CPU.")
+            self._device = "cpu"
+            self._model = model.to("cpu")
         self._model.eval()
         self._loaded = True
-        logger.info("TrOCR cargado correctamente")
+        logger.info(f"TrOCR cargado en {self._device}")
 
     def ocr_image(self, img_pil: Image.Image) -> OCRResult:
         import torch
