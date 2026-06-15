@@ -33,7 +33,14 @@ os.environ.setdefault("HF_HOME", os.environ.get("HF_HOME", "/data/models/hugging
 os.environ.setdefault("TRANSFORMERS_CACHE", os.environ.get("HF_HOME", "/data/models/huggingface"))
 
 print("  Cargando modelos Surya (detección + reconocimiento + layout)...")
-from surya.model.detection.segformer import load_model as load_det, load_processor as load_det_proc
+try:
+    from surya.model.detection.segformer import load_model as load_det, load_processor as load_det_proc
+except ImportError:
+    try:
+        from surya.model.detection.model import load_model as load_det, load_processor as load_det_proc
+    except ImportError:
+        from surya.model.detection import load_model as load_det, load_processor as load_det_proc
+
 from surya.model.recognition.model import load_model as load_rec
 from surya.model.recognition.processor import load_processor as load_rec_proc
 
