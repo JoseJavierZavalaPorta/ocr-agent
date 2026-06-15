@@ -39,9 +39,12 @@ export function Header() {
           </div>
         )}
 
-        <div className={`flex items-center gap-1.5 ${status?.ollama_online ? 'text-emerald-400' : 'text-red-400'}`}>
+        <div className={`flex items-center gap-1.5 ${
+          status === undefined ? 'text-muted' :
+          status.ollama_online ? 'text-emerald-400' : 'text-red-400'
+        }`}>
           {status?.ollama_online ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
-          <span>Ollama {status?.ollama_online ? 'online' : 'offline'}</span>
+          <span>Ollama {status === undefined ? '…' : status.ollama_online ? 'online' : 'offline'}</span>
         </div>
 
         {status?.active_jobs != null && status.active_jobs > 0 && (
