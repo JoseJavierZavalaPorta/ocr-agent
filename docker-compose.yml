@@ -15,6 +15,7 @@ services:
       - OUTPUT_PATH=/data/output
       - ORIGINALS_PATH=/data/originals
       - MODELS_PATH=/data/models
+      - SYSTEM_GPU_NAME=${SYSTEM_GPU_NAME:-}
     volumes:
       - ./volumes/input:/data/input
       - ./volumes/output:/data/output

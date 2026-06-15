@@ -142,16 +142,23 @@ async def system_status(db: Session = Depends(get_db)):
     vram_total = None
     vram_free = None
 
-    try:
-        import torch
-        if torch.cuda.is_available():
-            gpu_available = True
-            gpu_name = torch.cuda.get_device_name(0)
-            mem = torch.cuda.mem_get_info(0)
-            vram_free = round(mem[0] / 1024**3, 1)
-            vram_total = round(mem[1] / 1024**3, 1)
-    except Exception:
-        pass
+    # El backend no tiene /dev/kfd — GPU usada por worker/ollama, no por el backend.
+    # SYSTEM_GPU_NAME permite informar al dashboard que hay GPU en el sistema.
+    system_gpu_name = os.environ.get("SYSTEM_GPU_NAME")
+    if system_gpu_name:
+        gpu_available = True
+        gpu_name = system_gpu_name
+    else:
+        try:
+            import torch
+            if torch.cuda.is_available():
+                gpu_available = True
+                gpu_name = torch.cuda.get_device_name(0)
+                mem = torch.cuda.mem_get_info(0)
+                vram_free = round(mem[0] / 1024**3, 1)
+                vram_total = round(mem[1] / 1024**3, 1)
+        except Exception:
+            pass
 
     ollama_online = False
     try:
