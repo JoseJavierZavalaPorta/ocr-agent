@@ -44,14 +44,16 @@ except ImportError:
 from surya.model.recognition.model import load_model as load_rec
 from surya.model.recognition.processor import load_processor as load_rec_proc
 
-# surya 0.6.x: SuryaOCRConfig bug — silenciar INFO de transformers para evitar KeyError
-import transformers as _hf
-_hf.logging.set_verbosity_error()
+# surya 0.6.x: SuryaOCRConfig.__init__ requiere kwarg "encoder" pero
+# transformers llama self.__class__() sin args en to_diff_dict() → KeyError.
+# has_no_defaults_at_init=True hace que transformers salte esa llamada.
+from surya.model.recognition.config import SuryaOCRConfig as _SuryaOCRConfig
+_SuryaOCRConfig.has_no_defaults_at_init = True
+
 det_proc = load_det_proc()
 det_model = load_det()
 rec_model = load_rec()
 rec_proc = load_rec_proc()
-_hf.logging.set_verbosity_warning()
 print("  ✓ Surya OCR descargado")
 
 try:
