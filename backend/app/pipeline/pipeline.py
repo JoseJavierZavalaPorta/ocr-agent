@@ -214,7 +214,11 @@ class OCRPipeline:
                 # Fallback a Surya si MinerU falla
                 ocr_result = self.model_loader.surya.ocr_image(pil_img)
         else:  # SURYA por defecto
-            ocr_result = self.model_loader.surya.ocr_image(pil_img)
+            try:
+                ocr_result = self.model_loader.surya.ocr_image(pil_img)
+            except (TimeoutError, Exception) as e:
+                logger.warning(f"Surya falló ({type(e).__name__}: {e}), usando Tesseract fallback")
+                ocr_result = None
 
         if ocr_result is None or not ocr_result.text.strip():
             # Último fallback: Tesseract

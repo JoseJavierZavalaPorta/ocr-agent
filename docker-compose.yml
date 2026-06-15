@@ -55,6 +55,7 @@ services:
       - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-}
       - ROCR_VISIBLE_DEVICES=
       - HIP_VISIBLE_DEVICES=-1
+      - PDF_EXTRACTION_DPI=${PDF_EXTRACTION_DPI:-150}
     volumes:
       - ./volumes/input:/data/input
       - ./volumes/output:/data/output

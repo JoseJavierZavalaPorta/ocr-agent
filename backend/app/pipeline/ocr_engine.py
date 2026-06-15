@@ -77,19 +77,35 @@ class SuryaEngine:
         logger.info("Surya OCR cargado correctamente")
 
     def ocr_image(self, img_pil: Image.Image, langs: list[str] = None) -> OCRResult:
+        import threading
         from surya.ocr import run_ocr
 
         langs = langs or ["es", "en"]
-        results = run_ocr(
-            [img_pil],
-            [langs],
-            self._det_model,
-            self._det_processor,
-            self._rec_model,
-            self._rec_processor,
-        )
+        timeout_sec = int(os.environ.get("SURYA_TIMEOUT", "60"))
 
-        page_result = results[0]
+        _result: list = [None]
+        _exc: list = [None]
+
+        def _run():
+            try:
+                _result[0] = run_ocr(
+                    [img_pil], [langs],
+                    self._det_model, self._det_processor,
+                    self._rec_model, self._rec_processor,
+                )
+            except Exception as e:
+                _exc[0] = e
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(timeout=timeout_sec)
+
+        if t.is_alive():
+            raise TimeoutError(f"Surya deadlock: no respondió en {timeout_sec}s")
+        if _exc[0]:
+            raise _exc[0]
+
+        page_result = _result[0][0]
         lines = []
         confidences = []
 
