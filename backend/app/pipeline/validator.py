@@ -41,7 +41,7 @@ class QualityValidator:
         details = self._build_details(
             composite, ocr_confidence, correction_ratio, text_density
         )
-        logger.debug(f"Validación: score={composite:.2f} passed={passed} warning={is_warning}")
+        logger.info(f"Validación: score={composite:.2f} passed={passed} warning={is_warning}")
 
         return ValidationResult(
             passed=passed,
@@ -54,13 +54,20 @@ class QualityValidator:
         )
 
     def _compute_text_density(self, text: str, shape: tuple[int, int]) -> float:
-        """Palabras por área de página — páginas vacías tienen densidad 0."""
+        """
+        Palabras por página — detecta páginas en blanco o casi vacías.
+        Documentos cortos legítimos (recetas, IDs, formularios) tienen floor 0.50
+        para no penalizarlos por su brevedad natural.
+        """
         if not text or not text.strip():
             return 0.0
         words = len(text.split())
-        area_factor = (shape[0] * shape[1]) / (400 * 400)  # normalizado a 400x400
-        density = words / (area_factor * 50 + 1)
-        return min(1.0, density)
+        if words < 10:
+            # Muy pocas palabras: podría ser página casi vacía
+            return min(0.45, words / 10.0)
+        # Documento con contenido real: mínimo 0.50 independientemente del largo
+        # (recetas, DNI, formularios cortos son documentos válidos)
+        return max(0.50, min(1.0, words / 250.0))
 
     def _composite_score(
         self,
@@ -71,10 +78,20 @@ class QualityValidator:
         """
         Score compuesto ponderado:
         - ocr_confidence (40%): confianza del motor OCR
-        - correction_penalty (30%): penaliza correcciones masivas (>50% = dudoso)
+        - correction_penalty (30%): penaliza correcciones masivas solo cuando el OCR era inseguro
         - text_density (30%): página sin texto = problema
+
+        La penalidad de corrección depende de la confianza OCR:
+        - OCR seguro (≥0.75) + LLM cambió mucho = normalización válida de manuscrito garbled → penalizar poco
+        - OCR inseguro + LLM cambió mucho = LLM inventando sobre base débil → penalizar más
         """
-        correction_penalty = max(0.0, 1.0 - correction_ratio * 1.5)
+        if ocr_conf >= 0.75:
+            # OCR confiable: el LLM normalizó texto semánticamente garbled pero bien capturado
+            correction_penalty = max(0.55, 1.0 - correction_ratio * 0.5)
+        else:
+            # OCR inseguro: correcciones masivas son sospechosas
+            correction_penalty = max(0.35, 1.0 - correction_ratio * 1.0)
+
         composite = (
             ocr_conf * 0.40
             + correction_penalty * 0.30

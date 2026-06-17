@@ -94,24 +94,53 @@ class DocumentClassifier:
         return (sharpness * 0.6 + dynamic_range * 0.4)
 
     def _score_layout_complexity(self, img: np.ndarray) -> float:
-        """Detecta líneas de tabla horizontales/verticales."""
+        """
+        Detecta complejidad de layout: tablas, múltiples columnas.
+        Usa tres señales independientes para ser robusto ante tablas
+        parciales, líneas cortas y bordes finos.
+        """
         _, binary = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        h, w = img.shape
 
-        h_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(40, img.shape[1] // 20), 1))
-        h_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, h_kernel)
+        # ── Señal 1: líneas horizontales/verticales a múltiples escalas ──────
+        # Escalas pequeñas (1/8, 1/15, 1/30 del lado) capturan tablas
+        # parciales que la escala única 1/20 se pierde.
+        line_score = 0.0
+        for scale in [8, 15, 30]:
+            h_len = max(20, w // scale)
+            v_len = max(20, h // scale)
+            hk = cv2.getStructuringElement(cv2.MORPH_RECT, (h_len, 1))
+            vk = cv2.getStructuringElement(cv2.MORPH_RECT, (1, v_len))
+            h_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, hk)
+            v_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, vk)
+            density = (cv2.countNonZero(h_lines) + cv2.countNonZero(v_lines)) / (h * w + 1e-8)
+            line_score = max(line_score, min(1.0, density * 60))
 
-        v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(40, img.shape[0] // 20)))
-        v_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, v_kernel)
+        # ── Señal 2: celdas rectangulares (contornos anidados) ───────────────
+        # Las tablas tienen muchos rectángulos cerrados; el texto normal no.
+        cell_score = 0.0
+        contours, hierarchy = cv2.findContours(binary, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+        if hierarchy is not None and len(contours) > 0:
+            rect_cells = 0
+            for i, cnt in enumerate(contours):
+                area = cv2.contourArea(cnt)
+                if area < 500 or area > h * w * 0.25:
+                    continue
+                peri = cv2.arcLength(cnt, True)
+                approx = cv2.approxPolyDP(cnt, 0.04 * peri, True)
+                if len(approx) == 4:  # contorno rectangular = probable celda
+                    rect_cells += 1
+            cell_score = min(1.0, rect_cells / 8.0)  # 8+ celdas → score=1
 
-        total_px = img.shape[0] * img.shape[1]
-        table_density = (cv2.countNonZero(h_lines) + cv2.countNonZero(v_lines)) / (total_px + 1e-8)
+        # ── Señal 3: regularidad de proyección horizontal (filas de texto) ───
+        # Las tablas tienen filas de texto con separación uniforme.
+        proj_h = np.sum(binary, axis=1).astype(float)
+        text_rows = proj_h > proj_h.max() * 0.05
+        transitions = int(np.sum(np.diff(text_rows.astype(int)) != 0))
+        row_score = min(1.0, transitions / 30.0)  # 30+ transiciones → denso
 
-        # Detectar columnas múltiples via análisis de proyección vertical
-        proj = np.sum(binary, axis=0)
-        valleys = np.sum(proj < proj.mean() * 0.2)
-        column_score = min(1.0, valleys / (img.shape[1] * 0.3))
-
-        return min(1.0, table_density * 80 + column_score * 0.3)
+        # Combinar: la señal más fuerte domina (tabla detectada por cualquier vía)
+        return float(max(line_score * 0.5 + cell_score * 0.5, cell_score, line_score * 0.7 + row_score * 0.3))
 
     def _score_degradation(self, img: np.ndarray) -> float:
         """
@@ -153,13 +182,17 @@ class DocumentClassifier:
         layout: float,
         degradation: float,
     ) -> OcrEngine:
-        # Manuscrito → TrOCR especializado en escritura a mano
-        if hw_score >= settings.handwriting_threshold:
-            return OcrEngine.TROCR
-
-        # Layout complejo (tablas densas) + buena calidad → MinerU (CPU pero mejor tabla)
+        # MinerU: layout complejo (tablas, columnas, formularios estructurados).
+        # No se filtra por hw_score: si MinerU produce solo imágenes o texto
+        # garbled, el pipeline hace fallback automático (ver pipeline.py).
         if layout >= settings.layout_complexity_threshold and quality >= 0.5:
             return OcrEngine.MINERU
 
-        # Por defecto: Surya (Marker) — mejor para documentos históricos impresos en AMD ROCm
+        # TrOCR: manuscrito sin estructura de layout claro Y con baja calidad
+        # de impresión. Alta print_quality (> 0.65) indica texto impreso nítido
+        # (DNI, formularios impresos) que Surya maneja mejor que TrOCR.
+        if layout < 0.20 and hw_score >= settings.handwriting_threshold and quality < 0.65:
+            return OcrEngine.TROCR
+
+        # Surya: documentos impresos, mixtos o degradados.
         return OcrEngine.SURYA

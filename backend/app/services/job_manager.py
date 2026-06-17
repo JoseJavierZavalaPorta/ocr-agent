@@ -26,20 +26,24 @@ class JobManager:
         if not src.exists():
             raise FileNotFoundError(f"Archivo no encontrado: {file_path}")
 
-        # Mover a originals para no modificar el original
+        # Mover a originals para no modificar el original.
+        # Si el archivo ya está en originals (upload directo via API), no copiar.
         originals_dir = Path(settings.originals_path)
         originals_dir.mkdir(parents=True, exist_ok=True)
-        dest = originals_dir / src.name
 
-        # Evitar colisión de nombres
-        counter = 1
-        while dest.exists():
-            stem = src.stem
-            dest = originals_dir / f"{stem}_{counter}{src.suffix}"
-            counter += 1
-
-        shutil.copy2(str(src), str(dest))
-        logger.info(f"Archivo copiado a originals: {dest}")
+        if src.parent.resolve() == originals_dir.resolve():
+            dest = src
+            logger.info(f"Archivo ya en originals: {dest}")
+        else:
+            dest = originals_dir / src.name
+            # Evitar colisión de nombres
+            counter = 1
+            while dest.exists():
+                stem = src.stem
+                dest = originals_dir / f"{stem}_{counter}{src.suffix}"
+                counter += 1
+            shutil.copy2(str(src), str(dest))
+            logger.info(f"Archivo copiado a originals: {dest}")
 
         job = Job(
             filename=src.name,

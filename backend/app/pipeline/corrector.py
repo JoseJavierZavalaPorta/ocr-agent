@@ -5,32 +5,45 @@ from app.config import get_settings
 
 settings = get_settings()
 
-_CORRECTION_PROMPT = """Eres un experto en corrección de documentos históricos en español (1900-actualidad).
-Se te proporciona texto extraído por OCR de un documento escaneado. El texto puede contener errores típicos de OCR:
-caracteres confundidos (1/l/I, 0/O, rn/m, cl/d, etc.), palabras partidas, espacios incorrectos, acentos faltantes.
+_CORRECTION_PROMPT = """Eres un experto en limpieza y normalización de texto extraído por OCR de documentos escaneados en español.
 
-REGLAS:
-1. Corrige SOLO errores evidentes de OCR. NO reescribas ni parafrasees.
-2. Preserva nombres propios, lugares, fechas y términos legales/técnicos exactamente.
-3. Preserva la puntuación original incluso si parece anticuada.
-4. Si una palabra es ambigua, elige la opción más coherente con el contexto histórico.
-5. Preserva el formato Markdown (si hay tablas, listas, encabezados).
-6. Responde ÚNICAMENTE con el texto corregido, sin explicaciones ni comentarios.
+El texto puede contener:
+- Errores de caracteres: 1/l/I, 0/O, rn/m, cl/d, acentos faltantes
+- Artefactos de layout: números aislados sin contexto, fragmentos de borde de tabla ("|", "—"), coordenadas numéricas sueltas
+- Fragmentos cortados al inicio de línea por el borde del scanner
+- Palabras partidas, espaciado incorrecto, saltos de línea incorrectos
+
+INSTRUCCIONES:
+1. Elimina artefactos OCR obvios: números aislados sin contexto semántico, símbolos "|" sueltos, cadenas numéricas que claramente son ruido del scanner.
+2. Corrige errores de caracteres usando el contexto de la frase.
+3. Normaliza espaciado y saltos de línea para que el texto sea legible.
+4. Preserva TODOS los datos reales: nombres propios, fechas, números de documento, DNI, códigos, términos legales/médicos/técnicos.
+5. Si un fragmento está cortado por el borde del scan, indícalo con [...].
+6. Preserva el formato Markdown existente (encabezados, listas).
+7. Responde ÚNICAMENTE con el texto limpio y normalizado, sin explicaciones.
 
 TEXTO OCR:
 {ocr_text}
 
-TEXTO CORREGIDO:"""
+TEXTO NORMALIZADO:"""
 
-_CORRECTION_PROMPT_HANDWRITING = """Eres un experto en transcripción de manuscritos históricos en español.
-Se te proporciona texto extraído por OCR de un manuscrito escaneado. El texto puede ser impreciso.
+_CORRECTION_PROMPT_HANDWRITING = """Eres un experto en transcripción de documentos manuscritos en español: recetas médicas, cartas, formularios y actas.
 
-REGLAS:
-1. Corrige errores obvios preservando el estilo de escritura original.
-2. Si el texto es ilegible en un fragmento, escribe [ilegible].
-3. Preserva abreviaturas históricas (q. = que, etc.).
-4. NO inventes ni completes información faltante.
-5. Responde ÚNICAMENTE con el texto corregido.
+Tienes conocimiento de:
+- Medicamentos comunes y sus nombres (Rohypnol, Diazepam, Amoxicilina, Ibuprofeno, etc.)
+- Abreviaturas médicas: Rp. (receta), mg (miligramos), comp./cáp. (comprimidos/cápsulas), c/12hs, VO, IM, EV, Dr., M.P. (matrícula profesional)
+- Formato de receta: paciente, DNI, edad, medicamento, dosis, cantidad, médico, matrícula, fecha
+
+El OCR de escritura a mano produce errores típicos: letras confundidas (a/u/o, n/u, r/n, l/i, b/h), sílabas transpuestas, palabras cortadas.
+
+INSTRUCCIONES:
+1. Usa el contexto del tipo de documento para inferir palabras garbled (ej: en una receta, "Robipinol" → "Rohypnol", "Flunizepamon" → posiblemente un medicamento).
+2. Corrige errores de caracteres usando coherencia semántica y conocimiento médico/documental.
+3. Para nombres propios de pacientes o médicos ilegibles, conserva la mejor aproximación posible.
+4. Para fragmentos completamente indescifrables, escribe [ilegible].
+5. Preserva TODOS los números exactamente: DNI, dosis, fechas, matrículas, cantidades.
+6. NO inventes datos que no estén presentes en el texto.
+7. Responde ÚNICAMENTE con el texto transcrito y corregido, sin explicaciones ni comentarios.
 
 TEXTO OCR:
 {ocr_text}
@@ -39,12 +52,12 @@ TEXTO CORREGIDO:"""
 
 
 class LLMCorrector:
-    """Corrector contextual vía Ollama (llama3.1:8b). Funciona 100% offline."""
+    """Corrector contextual vía Ollama. Funciona 100% offline."""
 
     def __init__(self):
         self._client = httpx.AsyncClient(
             base_url=settings.ollama_url,
-            timeout=httpx.Timeout(120.0),
+            timeout=httpx.Timeout(300.0),
         )
         self._model = settings.ollama_correction_model
 
@@ -62,19 +75,21 @@ class LLMCorrector:
             return ocr_text, 0.0
 
         template = _CORRECTION_PROMPT_HANDWRITING if is_handwriting else _CORRECTION_PROMPT
-        prompt = template.format(ocr_text=ocr_text[:4000])  # límite de contexto
+        prompt = template.format(ocr_text=ocr_text[:4000])
+        model = self._model
 
         try:
             response = await self._client.post(
                 "/api/generate",
                 json={
-                    "model": self._model,
+                    "model": model,
                     "prompt": prompt,
                     "stream": False,
                     "options": {
                         "temperature": 0.1,
                         "top_p": 0.9,
-                        "num_predict": 2048,
+                        "num_predict": 512,
+                        "num_ctx": 4096,
                     },
                 },
             )

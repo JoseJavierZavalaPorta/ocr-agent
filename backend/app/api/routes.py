@@ -58,6 +58,15 @@ def retry_job(job_id: str, db: Session = Depends(get_db)):
     return job
 
 
+@router.post("/jobs/resume")
+def resume_stuck_jobs(db: Session = Depends(get_db)):
+    """Re-encola todos los jobs que quedaron interrumpidos (post-reinicio/apagado)."""
+    recovered_ids = job_manager.recover_interrupted_jobs(db)
+    for job_id in recovered_ids:
+        process_job_task.apply_async(args=[job_id], queue="ocr")
+    return {"resumed": len(recovered_ids), "job_ids": recovered_ids}
+
+
 @router.delete("/jobs/{job_id}", status_code=204)
 def delete_job(job_id: str, db: Session = Depends(get_db)):
     if not job_manager.delete_job(db, job_id):
@@ -73,15 +82,17 @@ async def upload_pdf(
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Solo se aceptan archivos PDF")
 
-    input_dir = Path(settings.input_path)
-    input_dir.mkdir(parents=True, exist_ok=True)
-    dest = input_dir / file.filename
+    # Guardar en originals (no en input) para evitar que el file watcher
+    # cree un job duplicado al detectar el archivo recién guardado.
+    originals_dir = Path(settings.originals_path)
+    originals_dir.mkdir(parents=True, exist_ok=True)
+    dest = originals_dir / file.filename
 
     # Evitar colisión
     counter = 1
     while dest.exists():
         stem = Path(file.filename).stem
-        dest = input_dir / f"{stem}_{counter}.pdf"
+        dest = originals_dir / f"{stem}_{counter}.pdf"
         counter += 1
 
     content = await file.read()

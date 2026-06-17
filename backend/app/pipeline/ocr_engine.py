@@ -158,22 +158,39 @@ class TrOCREngine:
         logger.info(f"TrOCR cargado en {self._device}")
 
     def ocr_image(self, img_pil: Image.Image) -> OCRResult:
+        import threading
         import torch
 
-        rgb = img_pil.convert("RGB")
-        pixel_values = self._processor(images=rgb, return_tensors="pt").pixel_values.to(self._device)
+        timeout_sec = int(os.environ.get("TROCR_TIMEOUT", "120"))
 
-        with torch.no_grad():
-            generated_ids = self._model.generate(
-                pixel_values,
-                max_new_tokens=512,
-                num_beams=4,
-                early_stopping=True,
-            )
+        _result: list = [None]
+        _exc: list = [None]
 
-        text = self._processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        def _run():
+            try:
+                rgb = img_pil.convert("RGB")
+                pixel_values = self._processor(images=rgb, return_tensors="pt").pixel_values.to(self._device)
+                with torch.no_grad():
+                    generated_ids = self._model.generate(
+                        pixel_values,
+                        max_new_tokens=256,
+                        num_beams=2,
+                        early_stopping=True,
+                    )
+                _result[0] = self._processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+            except Exception as e:
+                _exc[0] = e
 
-        # TrOCR no devuelve confianza directamente; estimar por longitud de salida
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(timeout=timeout_sec)
+
+        if t.is_alive():
+            raise TimeoutError(f"TrOCR deadlock: no respondió en {timeout_sec}s")
+        if _exc[0]:
+            raise _exc[0]
+
+        text = _result[0] or ""
         confidence = min(0.95, len(text.strip()) / 200.0) if text.strip() else 0.1
         return OCRResult(text=text, confidence=confidence, engine=OcrEngine.TROCR)
 
@@ -264,3 +281,75 @@ class TesseractFallback:
         except Exception as e:
             logger.error(f"Tesseract falló: {e}")
             return OCRResult(text="", confidence=0.0, engine=OcrEngine.TESSERACT)
+
+
+class VisionEngine:
+    """
+    Motor de visión: envía la imagen directamente a un modelo multimodal en Ollama.
+    Ideal para manuscritos y documentos con letra cursiva donde el OCR tradicional falla.
+    """
+
+    _PROMPT = (
+        "Transcribe todo el texto visible en esta imagen exactamente como aparece. "
+        "Es un documento en español (puede ser una receta médica, carta, formulario, acta). "
+        "Preserva la estructura: encabezados, campos, líneas. "
+        "Para texto manuscrito cursivo, transcríbelo lo mejor posible usando el contexto. "
+        "Para fragmentos completamente ilegibles escribe [ilegible]. "
+        "Responde ÚNICAMENTE con el texto transcrito, sin explicaciones."
+    )
+
+    def __init__(self, ollama_url: str, model: str = "qwen2-vl:7b"):
+        self.ollama_url = ollama_url.rstrip("/")
+        self.model = model
+        self._available: Optional[bool] = None
+
+    def is_available(self) -> bool:
+        if self._available is None:
+            try:
+                import urllib.request
+                req = urllib.request.urlopen(
+                    f"{self.ollama_url}/api/tags", timeout=5
+                )
+                import json
+                data = json.loads(req.read())
+                names = [m["name"] for m in data.get("models", [])]
+                self._available = any(self.model.split(":")[0] in n for n in names)
+            except Exception:
+                self._available = False
+        return self._available
+
+    def ocr_image(self, img_pil: Image.Image) -> OCRResult:
+        import base64
+        import io
+        import urllib.request
+        import urllib.error
+        import json
+
+        buf = io.BytesIO()
+        img_pil.convert("RGB").save(buf, format="JPEG", quality=92)
+        img_b64 = base64.b64encode(buf.getvalue()).decode()
+
+        payload = json.dumps({
+            "model": self.model,
+            "prompt": self._PROMPT,
+            "images": [img_b64],
+            "stream": False,
+            "options": {"temperature": 0.1, "num_predict": 1024},
+        }).encode()
+
+        try:
+            req = urllib.request.Request(
+                f"{self.ollama_url}/api/generate",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                data = json.loads(resp.read())
+            text = data.get("response", "").strip()
+            confidence = 0.82 if len(text.strip()) > 20 else 0.3
+            logger.info(f"VisionEngine extrajo {len(text)} chars con {self.model}")
+            return OCRResult(text=text, confidence=confidence, engine=OcrEngine.VISION)
+        except Exception as e:
+            logger.error(f"VisionEngine falló: {e}")
+            return OCRResult(text="", confidence=0.0, engine=OcrEngine.VISION)

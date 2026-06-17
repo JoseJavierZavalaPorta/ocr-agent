@@ -1,38 +1,44 @@
 #!/usr/bin/env bash
 # =============================================================================
-# download_models.sh
-# Descarga TODOS los modelos necesarios. Ejecutar UNA VEZ con internet.
-# Después de esto el sistema opera completamente offline.
-# Ejecutar DENTRO del container worker:
-#   docker compose exec worker bash /app/download_models.sh
+# download_models.sh — Descarga modelos HuggingFace (Surya, TrOCR, MinerU)
+#
+# IMPORTANTE: Este archivo tiene DOS copias que deben mantenerse en sync:
+#   - download_models.sh         (referencia en el root, visible al usuario)
+#   - backend/download_models.sh (bakeado en la imagen Docker — el que corre)
+# Al editar uno, copiar al otro: cp download_models.sh backend/download_models.sh
+#
+# Se ejecuta DENTRO del container worker durante la instalación.
+# install.sh lo invoca automáticamente — no es necesario correrlo a mano.
+#
+# Si necesitas re-descargar modelos manualmente:
+#   docker compose run --rm --no-deps \
+#     -e HF_HUB_OFFLINE=0 -e TRANSFORMERS_OFFLINE=0 \
+#     worker bash /app/download_models.sh
 # =============================================================================
-
 set -euo pipefail
 
 MODELS_PATH="${MODELS_PATH:-/data/models}"
 HF_CACHE="${MODELS_PATH}/huggingface"
 MARKER_CACHE="${MODELS_PATH}/marker"
-OLLAMA_URL="${OLLAMA_URL:-http://ollama:11434}"
-OLLAMA_MODEL="${OLLAMA_CORRECTION_MODEL:-llama3.1:8b}"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
-info()    { echo -e "${GREEN}[INFO]${NC} $*"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
-error_()  { echo -e "${RED}[ERROR]${NC} $*"; }
-step()    { echo -e "\n${GREEN}▶ $*${NC}"; }
+GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
+info()    { echo -e "  ${GREEN}✓${NC} $*"; }
+warn()    { echo -e "  ${YELLOW}⚠${NC} $*"; }
+step()    { echo -e "\n${CYAN}▶${NC} $*"; }
 
-# ── 1. Surya / Marker models ─────────────────────────────────────────────────
-step "Descargando modelos Surya OCR (via marker-pdf)..."
 export HF_HOME="$HF_CACHE"
 export TRANSFORMERS_CACHE="$HF_CACHE"
 export MARKER_MODELS_DIR="$MARKER_CACHE"
+export HF_HUB_OFFLINE=0
+export TRANSFORMERS_OFFLINE=0
 
+# ── 1. Surya OCR ─────────────────────────────────────────────────────────────
+step "Descargando modelos Surya OCR (~1 GB)..."
 python3 - <<'PYEOF'
 import os
-os.environ.setdefault("HF_HOME", os.environ.get("HF_HOME", "/data/models/huggingface"))
-os.environ.setdefault("TRANSFORMERS_CACHE", os.environ.get("HF_HOME", "/data/models/huggingface"))
+os.environ["HF_HOME"] = os.environ.get("HF_HOME", "/data/models/huggingface")
+os.environ["TRANSFORMERS_CACHE"] = os.environ["HF_HOME"]
 
-print("  Cargando modelos Surya (detección + reconocimiento + layout)...")
 try:
     from surya.model.detection.segformer import load_model as load_det, load_processor as load_det_proc
 except ImportError:
@@ -44,106 +50,61 @@ except ImportError:
 from surya.model.recognition.model import load_model as load_rec
 from surya.model.recognition.processor import load_processor as load_rec_proc
 
-# surya 0.6.x + transformers >=4.45 tienen dos incompatibilidades:
-# 1. SuryaOCRConfig() sin args → KeyError "encoder" en to_diff_dict()
-# 2. get_text_config() ambiguo: config tiene text_encoder Y decoder
 from surya.model.recognition.config import SuryaOCRConfig as _SuryaOCRConfig
 _SuryaOCRConfig.has_no_defaults_at_init = True
 def _get_text_config(self, decoder=False):
     return self.decoder if hasattr(self, 'decoder') else self.text_encoder
 _SuryaOCRConfig.get_text_config = _get_text_config
 
-det_proc = load_det_proc()
-det_model = load_det()
-rec_model = load_rec()
-rec_proc = load_rec_proc()
-print("  ✓ Surya OCR descargado")
+load_det_proc(); load_det()
+load_rec(); load_rec_proc()
+print("  Surya OCR descargado")
 
 try:
     from surya.model.layout.model import load_model as load_layout
     from surya.model.layout.processor import load_processor as load_layout_proc
-    load_layout_proc()
-    load_layout()
-    print("  ✓ Surya Layout descargado")
+    load_layout_proc(); load_layout()
+    print("  Surya Layout descargado")
 except Exception as e:
-    print(f"  ⚠ Surya Layout no disponible: {e}")
+    print(f"  Surya Layout no disponible: {e}")
 PYEOF
+info "Surya OK"
 
 # ── 2. TrOCR (manuscritos) ───────────────────────────────────────────────────
-step "Descargando TrOCR (manuscritos: microsoft/trocr-large-handwritten)..."
+step "Descargando TrOCR manuscritos (~1.8 GB)..."
 python3 - <<'PYEOF'
 import os
 cache = os.environ.get("HF_HOME", "/data/models/huggingface")
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
-print("  Descargando processor TrOCR...")
 TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten", cache_dir=cache)
-print("  Descargando modelo TrOCR (~1.8GB)...")
 VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-large-handwritten", cache_dir=cache)
-print("  ✓ TrOCR descargado")
+print("  TrOCR descargado")
 PYEOF
+info "TrOCR OK"
 
-# ── 3. MinerU models (descarga automática en primer uso) ─────────────────────
-step "Pre-calentando MinerU (magic-pdf)..."
+# ── 3. MinerU / PDF-Extract-Kit ──────────────────────────────────────────────
+step "Descargando modelos MinerU (layout, detección, tablas, ~5 GB)..."
 python3 - <<'PYEOF'
 import os
-cache = os.environ.get("MODELS_PATH", "/data/models")
-os.environ.setdefault("MINERU_MODELS_DIR", f"{cache}/mineru")
+os.environ.setdefault("MINERU_MODELS_DIR", f"{os.environ.get('MODELS_PATH', '/data/models')}/mineru")
 try:
-    import subprocess
-    # MinerU descarga sus modelos en el primer run
-    result = subprocess.run(
-        ["magic-pdf", "--help"],
-        capture_output=True, timeout=30
-    )
-    if result.returncode == 0:
-        print("  ✓ MinerU disponible")
-        # Trigger descarga de modelos MinerU
-        import magic_pdf.model.doc_analyze_by_custom_model as _  # noqa
-        print("  ✓ MinerU modelos cargados")
-    else:
-        print("  ⚠ MinerU no disponible (se usará Surya como fallback)")
+    import magic_pdf.model.doc_analyze_by_custom_model as _
+    print("  MinerU modelos cargados")
 except Exception as e:
-    print(f"  ⚠ MinerU skip: {e}")
+    print(f"  MinerU: {e}")
 PYEOF
+info "MinerU OK"
 
-# ── 4. Ollama model ───────────────────────────────────────────────────────────
-step "Descargando modelo Ollama: $OLLAMA_MODEL..."
-MAX_RETRIES=10
-RETRY_DELAY=5
-
-for i in $(seq 1 $MAX_RETRIES); do
-    if curl -sf "${OLLAMA_URL}/api/tags" > /dev/null 2>&1; then
-        break
-    fi
-    warn "Ollama no disponible aún, esperando... ($i/$MAX_RETRIES)"
-    sleep $RETRY_DELAY
-done
-
-if ! curl -sf "${OLLAMA_URL}/api/tags" > /dev/null 2>&1; then
-    error_ "Ollama no responde. Verificar que el container ollama esté corriendo."
-    exit 1
-fi
-
-info "Descargando $OLLAMA_MODEL (puede tardar varios minutos)..."
-curl -s -X POST "${OLLAMA_URL}/api/pull" \
-    -H "Content-Type: application/json" \
-    -d "{\"name\": \"$OLLAMA_MODEL\", \"stream\": false}" \
-    | python3 -c "import sys, json; d=json.load(sys.stdin); print('  ✓ Ollama:', d.get('status', 'ok'))"
-
-# ── 5. Tesseract datos español ────────────────────────────────────────────────
-step "Verificando Tesseract español..."
+# ── Tesseract español ─────────────────────────────────────────────────────────
+step "Verificando Tesseract..."
 if tesseract --list-langs 2>/dev/null | grep -q "spa"; then
-    info "✓ Tesseract español disponible"
+    info "Tesseract español OK"
 else
-    warn "Tesseract español no detectado. Instalando..."
-    apt-get install -y tesseract-ocr-spa 2>/dev/null || true
+    warn "Tesseract español no detectado (ya debería estar en la imagen Docker)"
 fi
 
 # ── Resumen ───────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}  ✓ Descarga de modelos completada${NC}"
-echo -e "${GREEN}  El sistema puede operar 100% offline ahora.${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}  ✓ Modelos HuggingFace descargados — sistema listo para modo offline${NC}"
 echo ""
-du -sh "${MODELS_PATH}"/* 2>/dev/null | sort -h || true
+du -sh "${HF_CACHE}" "${MARKER_CACHE}" 2>/dev/null | sort -h || true

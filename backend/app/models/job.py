@@ -42,6 +42,7 @@ class OcrEngine(str, enum.Enum):
     TROCR = "trocr"
     MINERU = "mineru"
     TESSERACT = "tesseract"
+    VISION = "vision"
 
 
 def _utcnow():

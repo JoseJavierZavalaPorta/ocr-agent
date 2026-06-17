@@ -42,9 +42,12 @@ safetensors
 sentencepiece
 tokenizers
 
-# MinerU (tablas complejas, fallback CPU)
-# Sin [full]: ese extra fija torch<=2.3.1 incompatible con marker-pdf>=2.4.1
-magic-pdf==1.1.0
+# MinerU (tablas complejas, fallback GPU)
+# 1.3.x eliminó la dependencia de detectron2/layoutlmv3 y es compatible con torch>=2.2
+magic-pdf==1.3.12
+ultralytics
+doclayout-yolo
+pycocotools
 
 # Ollama client (corrección LLM)
 ollama==0.3.3
@@ -57,9 +60,18 @@ aiohttp==3.10.5
 # File monitoring
 watchdog==5.0.0
 
+# OCR fallback CPU
+pytesseract
+
+# Requerido por magic-pdf 1.3.12
+openai
+rapid-table==1.0.5
+omegaconf
+dill
+
 # Utilities
 loguru==0.7.2
 python-magic==0.4.27
 python-slugify==8.0.4
-tqdm==4.66.5
+tqdm>=4.67.1
 tenacity==9.0.0

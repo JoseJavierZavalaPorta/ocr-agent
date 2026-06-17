@@ -22,16 +22,12 @@ class Settings(BaseSettings):
     confidence_threshold_warn: float = 0.60
     handwriting_threshold: float = 0.60
     layout_complexity_threshold: float = 0.40
-    pdf_extraction_dpi: int = 400
+    pdf_extraction_dpi: int = 200
     surya_batch_size: int = 8
 
-    # Modelos
-    ollama_correction_model: str = "llama3.1:8b"
-    ollama_routing_model: str = ""
-
-    # GPU
-    hsa_override_gfx_version: str = ""
-    rocr_visible_devices: str = "0"
+    # Modelos Ollama
+    ollama_correction_model: str = "qwen2.5:32b"
+    ollama_vision_model: str = "minicpm-v"
 
     # Celery
     celery_concurrency: int = 2

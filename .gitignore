@@ -1,4 +1,4 @@
-.env
+# Datos y volúmenes (generados en runtime)
 volumes/input/*
 volumes/output/*
 volumes/originals/*
@@ -14,6 +14,10 @@ volumes/models/*
 !volumes/models/ollama/.gitkeep
 !volumes/models/huggingface/.gitkeep
 
+# Configuración con secretos (usar .env.example como plantilla)
+.env
+
+# Python
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -21,10 +25,12 @@ __pycache__/
 .pytest_cache/
 *.log
 
+# Frontend
 node_modules/
 frontend/dist/
 frontend/.vite/
 
+# Varios
 *.tmp
 .DS_Store
 .claude/

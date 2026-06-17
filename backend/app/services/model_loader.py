@@ -8,7 +8,7 @@ from typing import Set
 from loguru import logger
 
 from app.models.job import OcrEngine
-from app.pipeline.ocr_engine import SuryaEngine, TrOCREngine, MinerUEngine
+from app.pipeline.ocr_engine import SuryaEngine, TrOCREngine, MinerUEngine, VisionEngine
 from app.config import get_settings
 
 settings = get_settings()
@@ -23,6 +23,10 @@ class ModelLoader:
         self.surya = SuryaEngine(models_path)
         self.trocr = TrOCREngine(models_path)
         self.mineru = MinerUEngine(models_path)
+        self.vision = VisionEngine(
+            ollama_url=settings.ollama_url,
+            model=settings.ollama_vision_model,
+        )
         self._loaded: Set[OcrEngine] = set()
 
     def ensure_loaded(self, engines: Set[OcrEngine]):
