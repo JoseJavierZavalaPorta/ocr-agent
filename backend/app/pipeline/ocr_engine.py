@@ -9,6 +9,19 @@ from loguru import logger
 
 from app.models.job import OcrEngine
 from app.config import get_settings
+from app.pipeline.constants import (
+    PROMPT_VISION_OCR,
+    VISION_JPEG_QUALITY,
+    VISION_TEMPERATURE,
+    VISION_MAX_TOKENS,
+    VISION_TIMEOUT_SEC,
+    VISION_CONFIDENCE_OK,
+    VISION_CONFIDENCE_LOW,
+    VISION_MIN_CHARS,
+    MINERU_TIMEOUT_SEC,
+    MINERU_CONFIDENCE_OK,
+    MINERU_CONFIDENCE_EMPTY,
+)
 
 settings = get_settings()
 
@@ -248,7 +261,7 @@ class MinerUEngine:
                     ["magic-pdf", "-p", tmp_pdf, "-o", out_dir, "-m", "ocr"],
                     capture_output=True,
                     text=True,
-                    timeout=300,
+                    timeout=MINERU_TIMEOUT_SEC,
                     env={**os.environ, "MINERU_MODELS_DIR": self.models_path},
                 )
 
@@ -262,7 +275,7 @@ class MinerUEngine:
                     return None
 
                 text = md_files[0].read_text(encoding="utf-8")
-                return OCRResult(text=text, confidence=0.85, engine=OcrEngine.MINERU)
+                return OCRResult(text=text, confidence=MINERU_CONFIDENCE_OK, engine=OcrEngine.MINERU)
 
         except Exception as e:
             logger.error(f"MinerU falló para página {page_num}: {e}")
@@ -289,14 +302,7 @@ class VisionEngine:
     Ideal para manuscritos y documentos con letra cursiva donde el OCR tradicional falla.
     """
 
-    _PROMPT = (
-        "Transcribe todo el texto visible en esta imagen exactamente como aparece. "
-        "Es un documento en español (puede ser una receta médica, carta, formulario, acta). "
-        "Preserva la estructura: encabezados, campos, líneas. "
-        "Para texto manuscrito cursivo, transcríbelo lo mejor posible usando el contexto. "
-        "Para fragmentos completamente ilegibles escribe [ilegible]. "
-        "Responde ÚNICAMENTE con el texto transcrito, sin explicaciones."
-    )
+    _PROMPT = PROMPT_VISION_OCR
 
     def __init__(self, ollama_url: str, model: str = "qwen2-vl:7b"):
         self.ollama_url = ollama_url.rstrip("/")
@@ -326,7 +332,7 @@ class VisionEngine:
         import json
 
         buf = io.BytesIO()
-        img_pil.convert("RGB").save(buf, format="JPEG", quality=92)
+        img_pil.convert("RGB").save(buf, format="JPEG", quality=VISION_JPEG_QUALITY)
         img_b64 = base64.b64encode(buf.getvalue()).decode()
 
         payload = json.dumps({
@@ -334,7 +340,7 @@ class VisionEngine:
             "prompt": self._PROMPT,
             "images": [img_b64],
             "stream": False,
-            "options": {"temperature": 0.1, "num_predict": 1024},
+            "options": {"temperature": VISION_TEMPERATURE, "num_predict": VISION_MAX_TOKENS},
         }).encode()
 
         try:
@@ -344,10 +350,10 @@ class VisionEngine:
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=180) as resp:
+            with urllib.request.urlopen(req, timeout=VISION_TIMEOUT_SEC) as resp:
                 data = json.loads(resp.read())
             text = data.get("response", "").strip()
-            confidence = 0.82 if len(text.strip()) > 20 else 0.3
+            confidence = VISION_CONFIDENCE_OK if len(text.strip()) > VISION_MIN_CHARS else VISION_CONFIDENCE_LOW
             logger.info(f"VisionEngine extrajo {len(text)} chars con {self.model}")
             return OCRResult(text=text, confidence=confidence, engine=OcrEngine.VISION)
         except Exception as e:

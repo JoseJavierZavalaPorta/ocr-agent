@@ -21,6 +21,12 @@ from app.pipeline.classifier import DocumentClassifier
 from app.pipeline.ocr_engine import SuryaEngine, TrOCREngine, MinerUEngine, TesseractFallback, VisionEngine
 from app.pipeline.corrector import LLMCorrector
 from app.pipeline.validator import QualityValidator
+from app.pipeline.constants import (
+    VISION_WORD_THRESHOLD,
+    VISION_MIN_CHARS,
+    HANDWRITING_FALLBACK_RATIO,
+    MINERU_MIN_REAL_CHARS,
+)
 from app.services.model_loader import ModelLoader
 
 settings = get_settings()
@@ -38,7 +44,7 @@ def _mineru_has_tables(text: str) -> bool:
 def _mineru_has_real_text(text: str) -> bool:
     """MinerU extrajo texto real más allá de referencias de imagen markdown."""
     cleaned = re.sub(r'!\[[^\]]*\]\([^)]*\)', '', text)
-    return len(cleaned.strip()) > 30
+    return len(cleaned.strip()) > MINERU_MIN_REAL_CHARS
 
 
 def _mineru_word_count(text: str) -> int:
@@ -245,7 +251,7 @@ class OCRPipeline:
         if engine == OcrEngine.TROCR and vision.is_available():
             logger.info(f"[PÁGINA {page_obj.page_number + 1}] Usando VisionEngine ({vision.model})")
             ocr_result = vision.ocr_image(pil_img)
-            if not ocr_result or not ocr_result.text.strip() or len(ocr_result.text.strip()) < 20:
+            if not ocr_result or not ocr_result.text.strip() or len(ocr_result.text.strip()) < VISION_MIN_CHARS:
                 logger.warning(f"[PÁGINA {page_obj.page_number + 1}] VisionEngine sin resultado útil — fallback a TrOCR")
                 ocr_result = None
 
@@ -268,14 +274,14 @@ class OCRPipeline:
             _mineru_words = _mineru_word_count(ocr_result.text) if ocr_result else 0
             if is_hw_type and vision.is_available() and (
                 ocr_result is None
-                or (not _mineru_has_tables(ocr_result.text) and _mineru_words < 80)
+                or (not _mineru_has_tables(ocr_result.text) and _mineru_words < VISION_WORD_THRESHOLD)
             ):
                 logger.info(
                     f"[PÁGINA {page_obj.page_number + 1}] "
                     f"MIXED/HW sin tablas → VisionEngine ({vision.model})"
                 )
                 v_result = vision.ocr_image(pil_img)
-                if v_result and len(v_result.text.strip()) >= 20:
+                if v_result and len(v_result.text.strip()) >= VISION_MIN_CHARS:
                     ocr_result = v_result
 
             # Fallback si MinerU (y Vision si se intentó) no produjeron texto real
@@ -288,12 +294,12 @@ class OCRPipeline:
                     f"(solo imágenes o vacío) — fallback TrOCR/Surya"
                 )
                 fallback = None
-                if analysis.handwriting_score >= settings.handwriting_threshold * 0.7:
+                if analysis.handwriting_score >= settings.handwriting_threshold * HANDWRITING_FALLBACK_RATIO:
                     try:
                         fallback = self.model_loader.trocr.ocr_image(pil_img)
                     except Exception as e:
                         logger.warning(f"TrOCR fallback falló: {e}")
-                if fallback is None or len(fallback.text.strip()) < 20:
+                if fallback is None or len(fallback.text.strip()) < VISION_MIN_CHARS:
                     fallback = self.model_loader.surya.ocr_image(pil_img)
                 ocr_result = fallback
         else:  # SURYA por defecto
@@ -429,8 +435,55 @@ class OCRPipeline:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write("".join(md_parts))
 
+        self._save_report(job, pages, stem, output_dir)
+
         logger.info(f"Markdown guardado: {output_path}")
         return output_path
+
+    def _save_report(self, job: Job, pages: list, stem: str, output_dir: Path) -> None:
+        """Genera reporte TXT de confianza por página junto al Markdown."""
+        _engine_label = {
+            OcrEngine.SURYA: "Surya",
+            OcrEngine.TROCR: "TrOCR",
+            OcrEngine.MINERU: "MinerU",
+            OcrEngine.TESSERACT: "Tesseract",
+            OcrEngine.VISION: "Vision",
+        }
+        _status_label = {
+            PageStatus.COMPLETED: "OK",
+            PageStatus.ERROR: "ERROR",
+        }
+
+        lines = [
+            f"REPORTE DE CONFIANZA OCR",
+            f"{'=' * 50}",
+            f"Documento : {job.filename}",
+            f"Procesado : {_utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
+            f"Páginas   : {job.total_pages}",
+            f"Confianza : {job.avg_confidence:.0%}",
+            f"{'=' * 50}",
+            f"",
+            f"{'PÁG':<5} {'MOTOR':<12} {'CONFIANZA':<11} {'CHARS':<8} {'CORREC.':<9} {'ESTADO'}",
+            f"{'-' * 55}",
+        ]
+
+        for page in pages:
+            num = page.page_number + 1
+            engine = _engine_label.get(page.ocr_engine, "?")
+            conf = f"{page.confidence:.0%}" if page.confidence else "—"
+            chars = len((page.corrected_text or page.raw_ocr_text or "").strip())
+            ratio = f"{page.correction_ratio:.0%}" if page.correction_ratio is not None else "—"
+            status = _status_label.get(page.status, "?")
+            lines.append(f"{num:<5} {engine:<12} {conf:<11} {chars:<8} {ratio:<9} {status}")
+            if page.status == PageStatus.ERROR and page.error_message:
+                lines.append(f"      ERROR: {page.error_message}")
+
+        lines += ["", f"{'=' * 50}"]
+
+        report_path = output_dir / f"{stem}_reporte.txt"
+        with open(str(report_path), "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        logger.info(f"Reporte guardado: {report_path}")
 
     def _set_job_status(self, job: Job, db: Session, status: JobStatus):
         job.status = status

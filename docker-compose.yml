@@ -4,6 +4,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: ocr-backend
+    user: "${UID:-1000}:${GID:-1000}"
     ports:
       - "8000:8000"
     env_file: .env
@@ -38,6 +39,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: ocr-worker
+    user: "${UID:-1000}:${GID:-1000}"
     command: celery -A celery_worker worker --loglevel=info --concurrency=2 -Q ocr --prefetch-multiplier=1 --pool=threads
     env_file: .env
     environment:
