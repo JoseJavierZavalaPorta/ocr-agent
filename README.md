@@ -4,38 +4,31 @@ Sistema de procesamiento OCR offline para documentos históricos escaneados. Con
 
 ---
 
-## Requisitos
+## Instalación desde cero (PC formateada)
 
-| Componente | Mínimo |
-|---|---|
-| OS | Ubuntu 22.04 / 24.04 |
-| RAM | 32 GB (los modelos LLM corren en CPU) |
-| Almacenamiento | 100 GB libres |
-| GPU | AMD (opcional — Ollama usa ROCm si está disponible, si no corre en CPU) |
-
----
-
-## Instalación
-
-> Solo necesitas internet en este paso. Una vez instalado, el sistema opera 100% offline.
+> Requisito previo: Ubuntu 22.04 / 24.04 instalado. Nada más.
 
 ```bash
-git clone https://github.com/JoseJavierZavalaPorta/ocr-agent.git
-cd ocr-agent
-chmod +x install.sh
+sudo apt-get install -y git curl && \
+git clone https://github.com/JoseJavierZavalaPorta/ocr-agent.git && \
+cd ocr-agent && \
 ./install.sh
 ```
 
-`install.sh` hace todo automáticamente:
+Ese único bloque hace todo:
 
-1. Instala Docker Engine + Docker Compose
-2. Detecta y configura AMD ROCm (si hay GPU AMD disponible)
-3. Crea la estructura de directorios
-4. Construye las imágenes Docker
-5. Descarga modelos Ollama: `qwen2.5:32b` (~19 GB) y `minicpm-v` (~5.5 GB)
-6. Descarga modelos HuggingFace: Surya, TrOCR, MinerU (~8 GB)
+| Paso | Qué instala |
+|---|---|
+| 1 | Docker Engine + Docker Compose |
+| 2 | AMD ROCm (detecta si hay GPU AMD, sino omite) |
+| 3 | Estructura de directorios |
+| 4 | Imágenes Docker (ubuntu:22.04 + PyTorch CPU) |
+| 5 | Modelos Ollama: `qwen2.5:32b` (~19 GB) + `minicpm-v` (~5.5 GB) |
+| 6 | Modelos HuggingFace: Surya + TrOCR + MinerU (~8 GB) |
 
-> **GPU AMD**: si `/dev/kfd` existe en el host, el script lo detecta y no reinstala drivers. Si la máquina no tiene GPU AMD, Ollama corre en CPU (más lento pero funcional).
+**Tiempo estimado:** 30-90 min según velocidad de internet (~35 GB de descarga).
+
+> **GPU AMD**: si `/dev/kfd` existe en el host, el script lo detecta y no reinstala drivers. Ollama usará la GPU automáticamente.
 
 ---
 
@@ -44,61 +37,76 @@ chmod +x install.sh
 ### Iniciar el sistema
 
 ```bash
-# Con la carpeta de input por defecto (./volumes/input/)
+# PDFs en ./volumes/input/ (carpeta por defecto)
 ./start.sh
 
-# Con una ruta personalizada
+# PDFs en una ruta personalizada
 ./start.sh /ruta/a/tus/documentos
 ```
 
 `start.sh` limpia la base de datos, levanta todos los servicios y encola automáticamente todos los PDFs del directorio indicado.
 
-### Monitorear el progreso
+### Monitorear
 
 ```bash
-./status.sh        # muestra estado de todos los jobs
-./logs.sh          # logs en tiempo real del worker
+./status.sh      # estado de todos los jobs en tiempo real
+./logs.sh        # logs del worker OCR
 ```
 
-O via API:
-```bash
-curl http://localhost:8000/api/jobs
-```
+API interactiva: **http://localhost:8000/docs**
 
-### Recuperar tras un apagado inesperado
+### Resultados
+
+Los archivos se generan en `volumes/output/`:
+
+- `nombre_documento.md` — texto extraído en Markdown
+- `nombre_documento_reporte.txt` — confianza por página, motor usado, caracteres extraídos
+
+### Recuperar tras apagado inesperado
 
 ```bash
 ./resume.sh [/ruta/a/tus/documentos]
 ```
 
-`resume.sh` **no borra la base de datos** — conserva el progreso ya completado y re-encola solo los jobs que quedaron interrumpidos.
+`resume.sh` **no borra la base de datos** — conserva el progreso y re-encola solo los jobs interrumpidos.
+
+---
+
+## Requisitos de hardware
+
+| Componente | Mínimo |
+|---|---|
+| OS | Ubuntu 22.04 / 24.04 |
+| RAM | 32 GB (LLM corre en CPU) |
+| Almacenamiento | 100 GB libres |
+| GPU | AMD discreta (opcional — sin GPU todo corre en CPU, más lento) |
 
 ---
 
 ## Arquitectura
 
 ```
-PDFs → API → Cola Redis → Worker → Markdown
+PDFs → API → Cola Redis → Worker → Markdown + Reporte TXT
                               ↓
-               ┌──────────────────────────┐
-               │  Pipeline por página:    │
-               │  1. Preprocesamiento     │
-               │  2. Clasificación        │
-               │  3. OCR (motor óptimo)   │
-               │  4. Corrección LLM       │
-               │  5. Validación           │
-               └──────────────────────────┘
+               ┌──────────────────────────────┐
+               │  Pipeline por página:        │
+               │  1. Preprocesamiento (200DPI)│
+               │  2. Clasificación doc_type   │
+               │  3. OCR (motor óptimo)       │
+               │  4. Corrección LLM           │
+               │  5. Validación + score       │
+               └──────────────────────────────┘
 ```
 
-**Motores OCR** (el pipeline elige automáticamente según el tipo de página):
+**Motores OCR** (el pipeline elige automáticamente):
 
 | Motor | Cuándo se usa |
 |---|---|
-| **MinerU** | Páginas con tablas, layout complejo, texto impreso |
-| **VisionEngine** (minicpm-v) | Manuscritos y formularios escaneados con poco texto |
-| **TrOCR** | Manuscritos puros sin layout estructurado |
+| **MinerU** | Tablas, layout complejo, texto impreso estructurado |
+| **VisionEngine** (minicpm-v) | Manuscritos y formularios con poco texto (<80 palabras) |
+| **TrOCR** | Manuscritos puros sin estructura de layout |
 | **Surya** | Páginas impresas sin tablas |
-| **Tesseract** | Fallback final |
+| **Tesseract** | Fallback final si todos los anteriores fallan |
 
 **Modelos:**
 
@@ -106,9 +114,55 @@ PDFs → API → Cola Redis → Worker → Markdown
 |---|---|---|
 | `qwen2.5:32b` | Corrección LLM contextual en español | ~19 GB |
 | `minicpm-v` | OCR visual para manuscritos (VisionEngine) | ~5.5 GB |
-| Surya OCR | Detección + reconocimiento de texto | ~3 GB |
+| Surya OCR | Detección + reconocimiento de texto impreso | ~3 GB |
 | TrOCR large | Manuscritos a mano | ~1.8 GB |
 | MinerU / PDF-Extract-Kit | Layout, tablas, fórmulas | ~5 GB |
+
+---
+
+## Configuración
+
+### Prompts y parámetros del pipeline
+
+Editar **[backend/app/pipeline/constants.py](backend/app/pipeline/constants.py)** — archivo centralizado con todos los prompts y constantes:
+
+```python
+# Prompt para documentos impresos
+PROMPT_CORRECTION_PRINTED = "..."
+
+# Prompt para manuscritos (recetas, cartas, actas)
+PROMPT_CORRECTION_HANDWRITING = "..."
+
+# Prompt que ve el modelo de visión (minicpm-v) al analizar la imagen
+PROMPT_VISION_OCR = "..."
+
+# Umbral de palabras para activar VisionEngine en páginas mixtas
+VISION_WORD_THRESHOLD = 80
+
+# Temperatura del LLM de corrección
+LLM_TEMPERATURE = 0.1
+```
+
+### Variables de entorno
+
+Editar `.env` (creado desde `.env.example` en la instalación):
+
+```env
+# Umbrales de calidad
+CONFIDENCE_THRESHOLD_PASS=0.80
+CONFIDENCE_THRESHOLD_WARN=0.60
+
+# Modelos Ollama
+OLLAMA_CORRECTION_MODEL=qwen2.5:32b
+OLLAMA_VISION_MODEL=minicpm-v
+
+# AMD ROCm — consultar con: rocminfo | grep gfx
+# RX 6000 → 10.3.0 | RX 7000 → 11.0.0 | RX 9000 → 12.0.0
+HSA_OVERRIDE_GFX_VERSION=11.0.0
+
+# Workers paralelos (aumentar si hay más RAM disponible)
+CELERY_CONCURRENCY=2
+```
 
 ---
 
@@ -116,92 +170,43 @@ PDFs → API → Cola Redis → Worker → Markdown
 
 ```
 ocr-agent/
-├── install.sh              ← Instalación completa desde cero
-├── start.sh                ← Inicia el sistema (acepta ruta de input como argumento)
+├── install.sh              ← Instalación desde cero (único comando necesario)
+├── start.sh                ← Inicia el sistema (argumento: ruta de input)
 ├── resume.sh               ← Recuperación post-apagado sin perder progreso
-├── logs.sh                 ← Logs en tiempo real
+├── logs.sh                 ← Logs en tiempo real del worker
 ├── status.sh               ← Estado de los jobs
 ├── download_models.sh      ← Re-descarga modelos HuggingFace (uso manual)
 ├── docker-compose.yml
-├── .env.example            ← Plantilla de configuración
-├── samples/                ← Documentos de prueba
-├── backend/
-│   ├── Dockerfile          ← ubuntu:22.04 + PyTorch CPU
-│   ├── requirements.txt
-│   └── app/
-│       ├── config.py
-│       ├── pipeline/
-│       │   ├── classifier.py   ← Analiza la página y elige el motor OCR
-│       │   ├── ocr_engine.py   ← Surya, TrOCR, MinerU, Tesseract, VisionEngine
-│       │   ├── corrector.py    ← Corrección LLM vía Ollama
-│       │   ├── validator.py    ← Score de calidad
-│       │   └── pipeline.py     ← Orquestador con checkpointing por página
-│       ├── services/
-│       │   ├── job_manager.py  ← CRUD + recuperación de jobs interrumpidos
-│       │   └── model_loader.py ← Singleton: modelos en memoria
-│       └── api/routes.py       ← REST API
-└── volumes/
-    ├── input/      ← PDFs de entrada
-    ├── output/     ← Markdowns generados
-    ├── originals/  ← Copia del PDF original (nunca se modifica)
-    ├── db/         ← SQLite con estado de jobs
-    └── models/     ← Cache de modelos (conservar para modo offline)
+├── .env.example            ← Plantilla de configuración (editar y renombrar a .env)
+├── samples/                ← Documentos de prueba históricos
+└── backend/
+    ├── Dockerfile
+    ├── requirements.txt
+    └── app/
+        ├── config.py
+        └── pipeline/
+            ├── constants.py    ← ★ PROMPTS Y PARÁMETROS (editar aquí)
+            ├── classifier.py   ← Detecta tipo de página y elige motor OCR
+            ├── ocr_engine.py   ← Implementación de cada motor OCR
+            ├── corrector.py    ← Corrección LLM vía Ollama
+            ├── validator.py    ← Score de calidad
+            └── pipeline.py     ← Orquestador con checkpointing por página
 ```
-
----
-
-## Configuración
-
-Editar `.env` (creado automáticamente desde `.env.example` en la instalación):
-
-```env
-# Umbrales de calidad
-CONFIDENCE_THRESHOLD_PASS=0.80   # >= 80% = aprobado
-CONFIDENCE_THRESHOLD_WARN=0.60   # 60-80% = advertencia
-
-# Modelos
-OLLAMA_CORRECTION_MODEL=qwen2.5:32b
-OLLAMA_VISION_MODEL=minicpm-v
-
-# AMD ROCm (ajustar según GPU)
-# Consultar con: rocminfo | grep gfx
-# RX 6000 series → 10.3.0 | RX 7000 series → 11.0.0 | RX 9000 series → 12.0.0
-HSA_OVERRIDE_GFX_VERSION=11.0.0
-
-# Worker
-CELERY_CONCURRENCY=2
-```
-
----
-
-## API
-
-Documentación interactiva: **http://localhost:8000/docs**
-
-| Método | Endpoint | Descripción |
-|---|---|---|
-| `GET` | `/api/jobs` | Lista todos los jobs |
-| `GET` | `/api/jobs/{id}` | Detalle con páginas y scores |
-| `POST` | `/api/jobs/upload` | Sube un PDF |
-| `POST` | `/api/jobs/resume` | Re-encola jobs interrumpidos |
-| `GET` | `/health` | Estado del sistema |
 
 ---
 
 ## Documentos de prueba
 
-En la carpeta `samples/` hay documentos históricos para probar el sistema:
+En `samples/` hay documentos históricos para probar el sistema:
 
-| Archivo | Tipo | Descripción |
+| Archivo | Tipo | Motor activado |
 |---|---|---|
-| `muestra_acta_1942.pdf` | Manuscrito | Acta oficial manuscrita, 1942 |
-| `muestra_carta_1923.pdf` | Manuscrito | Carta personal manuscrita, 1923 |
-| `muestra_padron_1955.pdf` | Mixto | Padrón electoral con tablas, 1955 |
-| `DOCUMENTOPRUEBA1.pdf` | Impreso | Documento impreso moderno |
-| `DOCUMENTOPRUEBA2.pdf` | Manuscrito | Receta médica manuscrita |
-| `documentoPrueba.pdf` | Mixto | Censo histórico, 31 páginas con tablas |
-
-Para procesarlos:
+| `muestra_acta_1942.pdf` | Manuscrito | VisionEngine |
+| `muestra_carta_1923.pdf` | Manuscrito | VisionEngine |
+| `muestra_padron_1955.pdf` | Mixto (tablas) | MinerU |
+| `DOCUMENTOPRUEBA1.pdf` | Manuscrito | VisionEngine |
+| `DOCUMENTOPRUEBA2.pdf` | Mixto (receta) | VisionEngine |
+| `documentoPrueba.pdf` | Censo 31 págs | MinerU + VisionEngine |
 
 ```bash
 ./start.sh ./samples
@@ -209,14 +214,131 @@ Para procesarlos:
 
 ---
 
+## API
+
+| Método | Endpoint | Descripción |
+|---|---|---|
+| `GET` | `/api/jobs` | Lista todos los jobs y su estado |
+| `GET` | `/api/jobs/{id}` | Detalle con páginas, scores y motores |
+| `POST` | `/api/jobs/upload` | Sube un PDF directamente |
+| `POST` | `/api/jobs/resume` | Re-encola jobs interrumpidos |
+| `GET` | `/health` | Estado del sistema |
+
+---
+
+## Casos frecuentes
+
+### El sistema se apagó a mitad del procesamiento
+
+```bash
+./resume.sh
+```
+
+Detecta automáticamente los jobs interrumpidos y los re-encola desde la última página completada. No reprocesa lo que ya estaba hecho.
+
+### Tengo miles de documentos a procesar
+
+```bash
+# Primera vez — inicializa y encola todo
+./start.sh /ruta/a/documentos
+
+# Si se cae — reanuda sin reprocesar
+./resume.sh /ruta/a/documentos
+```
+
+No usar `start.sh` para reanudar: limpia la base de datos y reprocesaría todo desde cero.
+Para aumentar velocidad, subir `CELERY_CONCURRENCY` en `.env` (requiere más RAM).
+
+### Quiero ajustar cómo corrige el LLM los manuscritos
+
+Editar `backend/app/pipeline/constants.py`:
+
+```python
+PROMPT_CORRECTION_HANDWRITING = """..."""
+```
+
+Luego reconstruir la imagen:
+
+```bash
+docker compose build worker && docker compose up -d worker
+```
+
+### Quiero ajustar qué instrucción recibe el modelo de visión
+
+Editar `backend/app/pipeline/constants.py`:
+
+```python
+PROMPT_VISION_OCR = "..."
+```
+
+Mismo proceso: `docker compose build worker && docker compose up -d worker`.
+
+### El sistema detecta manuscrito donde hay texto impreso (o viceversa)
+
+Ajustar `HANDWRITING_THRESHOLD` en `.env`. Valor más alto = más exigente para clasificar como manuscrito.
+
+```env
+HANDWRITING_THRESHOLD=0.85   # default
+```
+
+### Quiero procesar un nuevo tipo de documento (DNIs, contratos, etc.)
+
+Actualizar los prompts en `constants.py` para incluir el vocabulario del nuevo dominio:
+
+```python
+PROMPT_CORRECTION_HANDWRITING = """...
+Tienes conocimiento de:
+- Formato DNI: número, apellidos, nombres, fecha nacimiento, vencimiento
+..."""
+```
+
+### Agrego una GPU AMD discreta
+
+Ollama la detecta automáticamente al arrancar — no se necesita cambiar nada. Los modelos `qwen2.5:32b` y `minicpm-v` se cargarán en VRAM y la inferencia será significativamente más rápida.
+
+El worker OCR (Surya, TrOCR, MinerU) seguirá en CPU a menos que se cambie el Dockerfile a PyTorch ROCm.
+
+Verificar que la GPU se detecta:
+
+```bash
+docker logs ocr-ollama | grep "inference compute"
+```
+
+### Quiero actualizar el código después de un `git pull`
+
+```bash
+git pull
+docker compose build
+docker compose up -d
+```
+
+### Re-descargar modelos HuggingFace (Surya, TrOCR, MinerU)
+
+```bash
+docker compose run --rm --no-deps \
+  -e HF_HUB_OFFLINE=0 -e TRANSFORMERS_OFFLINE=0 \
+  worker bash /app/download_models.sh
+```
+
+### Ver el reporte de calidad de un documento
+
+```bash
+cat volumes/output/nombre_documento_reporte.txt
+```
+
+Muestra confianza por página, motor OCR utilizado, caracteres extraídos y porcentaje de corrección del LLM.
+
+---
+
 ## Resiliencia
 
-El sistema está diseñado para sobrevivir apagados en cualquier momento:
-
-- **Checkpointing por página**: cada página procesada se guarda inmediatamente en SQLite
-- **Celery `acks_late`**: si el worker muere, la tarea vuelve a la cola
-- **Redis AOF**: la cola persiste en disco
-- **`resume.sh`**: detecta jobs interrumpidos y los re-encola sin reprocesar páginas ya completadas
+| Mecanismo | Qué protege |
+|---|---|
+| Checkpointing por página en SQLite | Reanuda desde la última página completada |
+| Celery `acks_late` | Si el worker muere, la tarea vuelve a la cola automáticamente |
+| Redis AOF | La cola de tareas persiste en disco ante apagados |
+| `restart: unless-stopped` | Los containers se levantan solos al reiniciar el SO |
+| `resume.sh` | Re-encola jobs interrumpidos con un solo comando |
 
 ---
 
