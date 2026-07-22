@@ -61,6 +61,10 @@ cd "$REPO_DIR"
 mkdir -p volumes/models/ollama volumes/models/huggingface volumes/models/marker \
          volumes/models/mineru volumes/models/torch volumes/db volumes/output \
          volumes/originals volumes/redis volumes/input
+# docker compose falla en CUALQUIER subcomando (incluso "exec" a un servicio
+# que no lo usa) si falta un env_file declarado en el yml — backend/worker
+# declaran .env, así que tiene que existir antes de tocar docker compose.
+[[ -f .env ]] || cp .env.example .env
 info "Repo copiado — trabajando desde ${REPO_DIR}"
 
 # ── 2. Descargar .deb de Docker Engine para el DESTINO (sin red) ────────────
