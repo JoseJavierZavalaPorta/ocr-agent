@@ -30,6 +30,8 @@ Ese único bloque hace todo:
 
 > **GPU AMD**: si `/dev/kfd` existe en el host, el script lo detecta y no reinstala drivers. Ollama usará la GPU automáticamente.
 
+> **PC destino sin acceso a internet**: usa el flujo de [offline/README.md](offline/README.md) — arma el paquete en una máquina con red y despliégalo desde un USB, sin `install.sh` ni descargas en destino.
+
 ---
 
 ## Uso

@@ -1,0 +1,20 @@
+# =============================================================================
+# docker-compose.gpu.yml — Override opcional para pasar la GPU AMD al contenedor
+# de Ollama.
+#
+# Se aplica SOLO si /dev/kfd existe en el host (GPU AMD con driver amdgpu/KFD
+# cargado). Si el host no tiene GPU, docker-compose.yml solo se usa sin este
+# override y Ollama corre en CPU sin fallar por dispositivos inexistentes.
+#
+# Uso manual:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# offline/install-target.sh decide automáticamente si incluir este archivo.
+# =============================================================================
+services:
+  ollama:
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - video

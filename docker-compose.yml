@@ -1,5 +1,6 @@
 services:
   backend:
+    image: ocr-agent-backend:offline
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -35,6 +36,7 @@ services:
       start_period: 15s
 
   worker:
+    image: ocr-agent-backend:offline
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -89,7 +91,7 @@ services:
     restart: unless-stopped
 
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:rocm
     container_name: ocr-ollama
     ports:
       - "11434:11434"
@@ -100,12 +102,6 @@ services:
       - OLLAMA_MAX_LOADED_MODELS=2
       - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-11.0.0}
       - ROCR_VISIBLE_DEVICES=${ROCR_VISIBLE_DEVICES:-0}
-    # AMD ROCm GPU access
-    devices:
-      - /dev/kfd:/dev/kfd
-      - /dev/dri:/dev/dri
-    group_add:
-      - video
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
