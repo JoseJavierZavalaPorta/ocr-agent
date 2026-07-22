@@ -2,6 +2,11 @@
 # =============================================================================
 # download_models.sh — Descarga modelos HuggingFace (Surya, TrOCR, MinerU)
 #
+# IMPORTANTE: Este archivo tiene DOS copias que deben mantenerse en sync:
+#   - download_models.sh         (referencia en el root, visible al usuario)
+#   - backend/download_models.sh (bakeado en la imagen Docker — el que corre)
+# Al editar uno, copiar al otro: cp download_models.sh backend/download_models.sh
+#
 # Se ejecuta DENTRO del container worker durante la instalación.
 # install.sh lo invoca automáticamente — no es necesario correrlo a mano.
 #
@@ -78,15 +83,35 @@ PYEOF
 info "TrOCR OK"
 
 # ── 3. MinerU / PDF-Extract-Kit ──────────────────────────────────────────────
+# Basado en scripts/download_models_hf.py del repo oficial opendatalab/MinerU
+# (tag magic_pdf-1.3.12-released) — mismos repos/patterns, pero descargando a
+# las rutas fijas que ya espera /root/magic-pdf.json (ver backend/Dockerfile).
 step "Descargando modelos MinerU (layout, detección, tablas, ~5 GB)..."
 python3 - <<'PYEOF'
 import os
-os.environ.setdefault("MINERU_MODELS_DIR", f"{os.environ.get('MODELS_PATH', '/data/models')}/mineru")
-try:
-    import magic_pdf.model.doc_analyze_by_custom_model as _
-    print("  MinerU modelos cargados")
-except Exception as e:
-    print(f"  MinerU: {e}")
+from huggingface_hub import snapshot_download
+
+models_path = os.environ.get("MODELS_PATH", "/data/models")
+
+mineru_dir = f"{models_path}/mineru/PDF-Extract-Kit-1.0"
+snapshot_download(
+    "opendatalab/PDF-Extract-Kit-1.0",
+    allow_patterns=[
+        "models/Layout/YOLO/*",
+        "models/MFD/YOLO/*",
+        "models/MFR/unimernet_hf_small_2503/*",
+        "models/OCR/paddleocr_torch/*",
+    ],
+    local_dir=mineru_dir,
+)
+
+layoutreader_dir = f"{models_path}/mineru/layoutreader"
+snapshot_download(
+    "hantian/layoutreader",
+    allow_patterns=["*.json", "*.safetensors"],
+    local_dir=layoutreader_dir,
+)
+print("  MinerU modelos descargados")
 PYEOF
 info "MinerU OK"
 

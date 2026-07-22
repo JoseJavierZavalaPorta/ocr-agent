@@ -56,6 +56,7 @@ RUN CONF=/usr/local/lib/python3.10/dist-packages/magic_pdf/model/sub_modules/ocr
 # Config de MinerU apuntando al volumen de modelos
 RUN mkdir -p /root && echo '{ \
     "models-dir": "/data/models/mineru/PDF-Extract-Kit-1.0/models", \
+    "layoutreader-model-dir": "/data/models/mineru/layoutreader", \
     "device-mode": "cpu", \
     "layout-config": {"model": "doclayout_yolo"}, \
     "formula-config": {"mfd_model": "yolo_v8_mfd", "mfr_model": "unimernet_small", "enable": false}, \
