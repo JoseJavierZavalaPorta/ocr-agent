@@ -114,8 +114,11 @@ info "Imágenes descargadas"
 step "Descargando modelos Ollama (~24.5 GB) directo en ${REPO_DIR}/volumes/models/ollama..."
 docker compose up -d ollama
 MAX_WAIT=90; ELAPSED=0
-until curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; do
-    [[ $ELAPSED -ge $MAX_WAIT ]] && err "Ollama no respondió en ${MAX_WAIT}s"
+# Chequeo DENTRO del contenedor (docker compose exec), no vía el puerto mapeado
+# al host — en WSL2 el port-mapping a veces tarda o falla aunque el server ya
+# esté sano por dentro.
+until docker compose exec -T ollama curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; do
+    [[ $ELAPSED -ge $MAX_WAIT ]] && err "Ollama no respondió en ${MAX_WAIT}s (revisa: docker logs ocr-ollama)"
     sleep 3; ELAPSED=$((ELAPSED + 3))
 done
 docker compose exec ollama ollama pull qwen2.5:32b
