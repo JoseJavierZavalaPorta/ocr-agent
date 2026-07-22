@@ -125,8 +125,22 @@ until docker compose exec -T ollama ollama list > /dev/null 2>&1; do
     [[ $ELAPSED -ge $MAX_WAIT ]] && err "Ollama no respondió en ${MAX_WAIT}s (revisa: docker logs ocr-ollama)"
     sleep 3; ELAPSED=$((ELAPSED + 3))
 done
-docker compose exec ollama ollama pull qwen2.5:32b
-docker compose exec ollama ollama pull minicpm-v
+
+# Descargas de 19GB+ son propensas a cortes de red transitorios (DNS, wifi,
+# etc.) — reintenta unas cuantas veces en vez de morir al primer fallo.
+pull_ollama_model() {
+    local model="$1" attempt=1 max_attempts=5
+    until docker compose exec -T ollama ollama pull "$model"; do
+        if [[ $attempt -ge $max_attempts ]]; then
+            err "No se pudo descargar $model tras ${max_attempts} intentos"
+        fi
+        warn "Falló la descarga de $model (intento ${attempt}/${max_attempts}) — reintentando en 10s..."
+        sleep 10
+        attempt=$((attempt + 1))
+    done
+}
+pull_ollama_model qwen2.5:32b
+pull_ollama_model minicpm-v
 docker compose stop ollama
 info "Modelos Ollama descargados"
 
