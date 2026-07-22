@@ -104,7 +104,9 @@ services:
       - ROCR_VISIBLE_DEVICES=${ROCR_VISIBLE_DEVICES:-0}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      # ollama/ollama:rocm no trae curl instalado — "ollama list" usa el
+      # propio binario del contenedor para verificar que el server responde.
+      test: ["CMD-SHELL", "ollama list || exit 1"]
       interval: 30s
       timeout: 15s
       retries: 10
