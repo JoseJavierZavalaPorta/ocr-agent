@@ -73,6 +73,7 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docke
 https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
     | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt-get update -qq
+sudo apt-get clean   # caché limpio para que el cp de abajo no arrastre .deb de otros pasos
 # --reinstall fuerza la descarga aunque el paquete ya esté instalado en esta
 # máquina puente (si no, apt no descarga nada porque ya está "satisfecho").
 sudo apt-get install -y --reinstall --download-only --no-install-recommends \
@@ -92,6 +93,7 @@ step "Intentando empaquetar ROCm (AMD GPU) — best-effort..."
     cp "${TMP_ROCM}/${ROCM_DEB}" "$OUT/packages/rocm/"
     sudo apt-get install -y "${TMP_ROCM}/${ROCM_DEB}"
     sudo apt-get update -qq
+    sudo apt-get clean   # caché limpio — que este cp no arrastre los .deb de docker del paso anterior
     sudo apt-get install -y --reinstall --download-only --no-install-recommends amdgpu-dkms rocm
     cp /var/cache/apt/archives/*.deb "$OUT/packages/rocm/" 2>/dev/null || true
     rm -rf "$TMP_ROCM"
