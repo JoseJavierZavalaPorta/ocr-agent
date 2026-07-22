@@ -73,7 +73,9 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docke
 https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
     | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt-get update -qq
-sudo apt-get install -y --download-only --no-install-recommends \
+# --reinstall fuerza la descarga aunque el paquete ya esté instalado en esta
+# máquina puente (si no, apt no descarga nada porque ya está "satisfecho").
+sudo apt-get install -y --reinstall --download-only --no-install-recommends \
     docker-ce docker-ce-cli containerd.io docker-compose-plugin
 cp /var/cache/apt/archives/*.deb "$OUT/packages/docker/" 2>/dev/null || true
 info "$(ls "$OUT/packages/docker" | wc -l) paquetes .deb de Docker copiados"
@@ -90,7 +92,7 @@ step "Intentando empaquetar ROCm (AMD GPU) — best-effort..."
     cp "${TMP_ROCM}/${ROCM_DEB}" "$OUT/packages/rocm/"
     sudo apt-get install -y "${TMP_ROCM}/${ROCM_DEB}"
     sudo apt-get update -qq
-    sudo apt-get install -y --download-only --no-install-recommends amdgpu-dkms rocm
+    sudo apt-get install -y --reinstall --download-only --no-install-recommends amdgpu-dkms rocm
     cp /var/cache/apt/archives/*.deb "$OUT/packages/rocm/" 2>/dev/null || true
     rm -rf "$TMP_ROCM"
 ) && info "Paquetes ROCm empaquetados (best-effort) — $(ls "$OUT/packages/rocm" | wc -l) archivos" \
