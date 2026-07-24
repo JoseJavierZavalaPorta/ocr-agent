@@ -13,6 +13,7 @@ from app.services.job_manager import job_manager
 from app.services.model_loader import get_model_loader
 from app.pipeline.pipeline import OCRPipeline
 from app.api.websocket import broadcast_sync
+from app.tasks.summary_tasks import summarize_job_task
 
 
 @celery_app.task(
@@ -68,6 +69,10 @@ def process_job_task(self, job_id: str):
 
         broadcast_sync({"type": "job_finished", "job_id": job_id, "status": job.status.value})
         logger.info(f"Tarea completada para job {job_id}")
+
+        # Encolar resumen + clasificación (cola separada, no bloquea OCR)
+        if job.status in (JobStatus.COMPLETED, JobStatus.PARTIAL):
+            summarize_job_task.apply_async(args=[job_id], queue="resumen")
 
     except Exception as exc:
         logger.error(f"Error en tarea OCR job {job_id}: {exc}")

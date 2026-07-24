@@ -4,8 +4,9 @@
 # Levanta el sistema desde cero y encola todos los PDFs del directorio de input.
 #
 # Uso:
-#   ./start.sh                          # usa ./volumes/input/ por defecto
-#   ./start.sh /ruta/a/mis/documentos   # usa la ruta indicada como input
+#   ./start.sh                                          # ./volumes/input -> ./volumes/output
+#   ./start.sh /ruta/a/mis/documentos                    # input custom, output por defecto
+#   ./start.sh /ruta/a/mis/documentos /ruta/de/salida    # input y output custom
 # =============================================================================
 set -euo pipefail
 
@@ -19,7 +20,7 @@ step()  { echo -e "\n${BLUE}▶${NC} $*"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# ── Directorio de input (argumento opcional) ──────────────────────────────────
+# ── Directorio de input / output (argumentos opcionales) ─────────────────────
 INPUT_ARG="${1:-}"
 if [[ -n "$INPUT_ARG" ]]; then
     INPUT_DIR="$(realpath "$INPUT_ARG")"
@@ -29,12 +30,22 @@ else
 fi
 export INPUT_DIR
 
+OUTPUT_ARG="${2:-}"
+if [[ -n "$OUTPUT_ARG" ]]; then
+    mkdir -p "$OUTPUT_ARG"
+    OUTPUT_DIR="$(realpath "$OUTPUT_ARG")"
+else
+    OUTPUT_DIR="$(realpath ./volumes/output)"
+fi
+export OUTPUT_DIR
+
 echo -e "${CYAN}"
 echo "  ╔═══════════════════════════════════════════════╗"
 echo "  ║         OCR Agent — Inicio Limpio             ║"
 echo "  ╚═══════════════════════════════════════════════╝"
 echo -e "${NC}"
-echo -e "  Input: ${CYAN}${INPUT_DIR}${NC}"
+echo -e "  Input:  ${CYAN}${INPUT_DIR}${NC}"
+echo -e "  Output: ${CYAN}${OUTPUT_DIR}${NC}"
 
 # ── 1. Verificar .env ─────────────────────────────────────────────────────────
 [[ -f .env ]] || { cp .env.example .env; warn ".env creado desde .env.example — revisa la configuración"; }
@@ -46,7 +57,7 @@ docker compose down --remove-orphans 2>/dev/null && info "Servicios detenidos" |
 # ── 3. Limpiar datos anteriores ───────────────────────────────────────────────
 step "Limpiando base de datos, outputs y originales..."
 rm -f volumes/db/ocr.db volumes/db/ocr.db-shm volumes/db/ocr.db-wal
-rm -f volumes/output/*.md 2>/dev/null || true
+rm -f "${OUTPUT_DIR}"/*.md "${OUTPUT_DIR}"/*_reporte.txt "${OUTPUT_DIR}/reporte_clasificacion.xlsx" 2>/dev/null || true
 rm -f volumes/originals/*.pdf 2>/dev/null || true
 info "Base de datos limpia"
 info "Outputs limpiados"
@@ -71,7 +82,7 @@ mkdir -p volumes/db volumes/output volumes/originals volumes/redis \
          volumes/models/marker volumes/models/mineru volumes/models/torch
 
 # ── 6. Levantar servicios ────────────────────────────────────────────────────
-step "Iniciando servicios (redis, ollama, backend, worker)..."
+step "Iniciando servicios (redis, ollama, backend, worker, summarizer)..."
 docker compose up -d --remove-orphans --force-recreate
 info "Servicios lanzados"
 
@@ -115,7 +126,7 @@ echo -e "${GREEN}  ║  API:     http://localhost:8000/docs             ║${NC}
 echo -e "${GREEN}  ║  Ollama:  http://localhost:11434                 ║${NC}"
 echo -e "${GREEN}  ╠══════════════════════════════════════════════════╣${NC}"
 printf   "${GREEN}  ║  Input:   %-38s ║${NC}\n" "${INPUT_DIR}"
-echo -e "${GREEN}  ║  Output:  ./volumes/output/  (MD generados aquí) ║${NC}"
+printf   "${GREEN}  ║  Output:  %-38s ║${NC}\n" "${OUTPUT_DIR}"
 echo -e "${GREEN}  ╠══════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}  ║  Ver logs:      ./logs.sh                        ║${NC}"
 echo -e "${GREEN}  ║  Ver progreso:  ./status.sh                      ║${NC}"

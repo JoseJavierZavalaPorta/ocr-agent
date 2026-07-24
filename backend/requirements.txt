@@ -69,6 +69,9 @@ rapid-table==1.0.5
 omegaconf
 dill
 
+# Reporte Excel (resumen ejecutivo + clasificación)
+openpyxl==3.1.5
+
 # Utilities
 loguru==0.7.2
 python-magic==0.4.27

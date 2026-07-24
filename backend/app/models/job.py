@@ -45,6 +45,13 @@ class OcrEngine(str, enum.Enum):
     VISION = "vision"
 
 
+class SummaryStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    ERROR = "ERROR"
+
+
 def _utcnow():
     return datetime.now(timezone.utc)
 
@@ -69,6 +76,12 @@ class Job(Base):
 
     celery_task_id = Column(String(128), nullable=True)
     error_message = Column(Text, nullable=True)
+
+    # Resumen ejecutivo + clasificación (etapa posterior al OCR, cola separada)
+    summary_status = Column(SAEnum(SummaryStatus), default=SummaryStatus.PENDING, nullable=False, index=True)
+    summary_md_path = Column(String(1024), nullable=True)
+    summary_error = Column(Text, nullable=True)
+    classification_json = Column(Text, nullable=True)  # {"resumen_ejecutivo": str, "clasificacion_top5": [...]}
 
     created_at = Column(DateTime(timezone=True), default=_utcnow)
     updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)

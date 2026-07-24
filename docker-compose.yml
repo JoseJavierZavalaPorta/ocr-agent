@@ -20,7 +20,7 @@ services:
       - SYSTEM_GPU_NAME=${SYSTEM_GPU_NAME:-}
     volumes:
       - ${INPUT_DIR:-./volumes/input}:/data/input:ro
-      - ./volumes/output:/data/output
+      - ${OUTPUT_DIR:-./volumes/output}:/data/output
       - ./volumes/originals:/data/originals
       - ./volumes/db:/data/db
       - ./volumes/models:/data/models
@@ -64,7 +64,7 @@ services:
       - TROCR_TIMEOUT=120
     volumes:
       - ${INPUT_DIR:-./volumes/input}:/data/input:ro
-      - ./volumes/output:/data/output
+      - ${OUTPUT_DIR:-./volumes/output}:/data/output
       - ./volumes/originals:/data/originals
       - ./volumes/db:/data/db
       - ./volumes/models:/data/models
@@ -76,6 +76,36 @@ services:
     restart: unless-stopped
     ipc: host
     shm_size: '4gb'
+
+  summarizer:
+    image: ocr-agent-backend:offline
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ocr-summarizer
+    user: "${UID:-1000}:${GID:-1000}"
+    # Cola separada de baja concurrencia — resumen ejecutivo + clasificación
+    # top-5 vía Ollama (reutiliza qwen2.5:32b, ya cargado). No corre OCR local,
+    # así que no compite por CPU/RAM con la cola "ocr".
+    command: celery -A celery_worker worker --loglevel=info --concurrency=1 -Q resumen --prefetch-multiplier=1 --pool=threads
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_URL=http://ollama:11434
+      - DATABASE_URL=sqlite:////data/db/ocr.db
+      - INPUT_PATH=/data/input
+      - OUTPUT_PATH=/data/output
+      - SKIP_MODEL_WARMUP=1
+    volumes:
+      - ${INPUT_DIR:-./volumes/input}:/data/input:ro
+      - ${OUTPUT_DIR:-./volumes/output}:/data/output
+      - ./volumes/db:/data/db
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine

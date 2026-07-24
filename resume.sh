@@ -5,8 +5,12 @@
 # Los jobs reanudan desde la última página completada (checkpointing).
 #
 # Uso:
-#   ./resume.sh                          # reanuda con input por defecto
-#   ./resume.sh /ruta/a/mis/documentos   # reanuda con la ruta indicada
+#   ./resume.sh                                          # rutas por defecto
+#   ./resume.sh /ruta/a/mis/documentos                   # input custom
+#   ./resume.sh /ruta/a/mis/documentos /ruta/de/salida   # input y output custom
+#
+# IMPORTANTE: usa las MISMAS rutas que le pasaste a start.sh, si no el
+# backend no va a encontrar los archivos ya generados en la ruta correcta.
 # =============================================================================
 set -euo pipefail
 
@@ -30,12 +34,22 @@ else
 fi
 export INPUT_DIR
 
+OUTPUT_ARG="${2:-}"
+if [[ -n "$OUTPUT_ARG" ]]; then
+    mkdir -p "$OUTPUT_ARG"
+    OUTPUT_DIR="$(realpath "$OUTPUT_ARG")"
+else
+    OUTPUT_DIR="$(realpath ./volumes/output)"
+fi
+export OUTPUT_DIR
+
 echo -e "${CYAN}"
 echo "  ╔═══════════════════════════════════════════════╗"
 echo "  ║       OCR Agent — Reanudación de Jobs         ║"
 echo "  ╚═══════════════════════════════════════════════╝"
 echo -e "${NC}"
-echo -e "  Input: ${CYAN}${INPUT_DIR}${NC}"
+echo -e "  Input:  ${CYAN}${INPUT_DIR}${NC}"
+echo -e "  Output: ${CYAN}${OUTPUT_DIR}${NC}"
 
 # ── 1. Verificar .env ─────────────────────────────────────────────────────────
 [[ -f .env ]] || { cp .env.example .env; warn ".env creado desde .env.example — revisa la configuración"; }
@@ -104,6 +118,6 @@ echo -e "${GREEN}  ║  Reanudación completada                          ║${NC
 echo -e "${GREEN}  ╠══════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}  ║  Ver progreso:  ./status.sh                      ║${NC}"
 echo -e "${GREEN}  ║  Ver logs:      ./logs.sh                        ║${NC}"
-echo -e "${GREEN}  ║  Output:        ./volumes/output/                ║${NC}"
+printf   "${GREEN}  ║  Output:        %-31s ║${NC}\n" "${OUTPUT_DIR}"
 echo -e "${GREEN}  ╚══════════════════════════════════════════════════╝${NC}"
 echo ""

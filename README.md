@@ -39,11 +39,14 @@ Ese único bloque hace todo:
 ### Iniciar el sistema
 
 ```bash
-# PDFs en ./volumes/input/ (carpeta por defecto)
+# PDFs en ./volumes/input/ (carpeta por defecto) → salida en ./volumes/output/
 ./start.sh
 
 # PDFs en una ruta personalizada
 ./start.sh /ruta/a/tus/documentos
+
+# Ruta de entrada Y de salida personalizadas
+./start.sh /ruta/a/tus/documentos /ruta/de/salida
 ```
 
 `start.sh` limpia la base de datos, levanta todos los servicios y encola automáticamente todos los PDFs del directorio indicado.
@@ -57,20 +60,39 @@ Ese único bloque hace todo:
 
 API interactiva: **http://localhost:8000/docs**
 
+### Resumen ejecutivo + clasificación
+
+Además del OCR, el sistema genera automáticamente un resumen ejecutivo y clasifica cada documento contra una lista de categorías. Para activarlo, coloca un archivo **`categorias.json`** en la misma carpeta de entrada (junto a los PDFs), con esta forma exacta:
+
+```json
+{
+  "categorias": [
+    { "nombre": "Actas", "descripcion": "Documentos que registran acuerdos o decisiones tomadas en una reunión." },
+    { "nombre": "Correspondencia", "descripcion": "Cartas, oficios y comunicaciones entre personas o instituciones." }
+  ]
+}
+```
+
+- Debe existir la clave `"categorias"` con una lista de objetos `{"nombre", "descripcion"}` — al menos uno.
+- Si el archivo falta o no respeta este formato, el resumen/clasificación de cada documento queda marcado como error (columna "Error" en la hoja *Resúmenes MD* del Excel) — **el OCR sigue funcionando normalmente**, esta etapa es independiente.
+- Corre en una cola separada de baja concurrencia, y reutiliza el mismo `qwen2.5:32b` que ya usa la corrección de OCR (no descarga ni carga ningún modelo adicional).
+
 ### Resultados
 
-Los archivos se generan en `volumes/output/`:
+Los archivos se generan en `volumes/output/` (o en la ruta que hayas indicado como salida):
 
 - `nombre_documento.md` — texto extraído en Markdown
 - `nombre_documento_reporte.txt` — confianza por página, motor usado, caracteres extraídos
+- `nombre_documento_resumen.md` — resumen ejecutivo + clasificación top-5 (si hay `categorias.json`)
+- `reporte_clasificacion.xlsx` — reporte consolidado con 3 hojas: *Documentos MD*, *Resúmenes MD*, *Top 5 Clasificación*. Se regenera automáticamente después de cada documento — siempre refleja el estado actual, aunque el proceso se interrumpa a mitad de camino.
 
 ### Recuperar tras apagado inesperado
 
 ```bash
-./resume.sh [/ruta/a/tus/documentos]
+./resume.sh [/ruta/a/tus/documentos] [/ruta/de/salida]
 ```
 
-`resume.sh` **no borra la base de datos** — conserva el progreso y re-encola solo los jobs interrumpidos.
+`resume.sh` **no borra la base de datos** — conserva el progreso y re-encola solo los jobs interrumpidos. Usa las mismas rutas que le pasaste a `start.sh`.
 
 ---
 
@@ -186,6 +208,13 @@ ocr-agent/
     ├── requirements.txt
     └── app/
         ├── config.py
+        ├── tasks/
+        │   ├── ocr_tasks.py       ← Cola "ocr" (OCR + corrección, pesado)
+        │   └── summary_tasks.py   ← Cola "resumen" (resumen + clasificación, liviano)
+        ├── services/
+        │   ├── categories.py      ← Lee y valida categorias.json
+        │   ├── summarizer.py      ← Resumen ejecutivo + clasificación vía Ollama
+        │   └── excel_report.py    ← Genera reporte_clasificacion.xlsx (escritura atómica)
         └── pipeline/
             ├── constants.py    ← ★ PROMPTS Y PARÁMETROS (editar aquí)
             ├── classifier.py   ← Detecta tipo de página y elige motor OCR

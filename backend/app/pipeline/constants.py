@@ -54,6 +54,39 @@ TEXTO OCR:
 
 TEXTO CORREGIDO:"""
 
+# Prompt de resumen ejecutivo + clasificación (summarizer.py).
+# {categorias_texto}: lista "- nombre: descripcion" formateada por summarizer.py.
+# {md_text}: el .md completo del documento ya corregido.
+# Se combina con el parámetro format=json de Ollama, que fuerza JSON válido
+# a nivel de servidor — igual se pide explícitamente el esquema en el prompt
+# para que el modelo sepa qué claves usar.
+PROMPT_SUMMARY_CLASSIFICATION = """Eres un analista documental. Vas a leer un documento en español (ya transcrito de OCR) y debes:
+1. Escribir un resumen ejecutivo claro y conciso (5-10 líneas) en español, con los datos y hechos más relevantes del documento.
+2. Clasificarlo eligiendo ÚNICAMENTE entre las categorías de la siguiente lista — no inventes categorías nuevas. Ordena hasta 5 categorías de mayor a menor relevancia, con un score de 0.0 a 1.0 y una justificación breve (1 línea) por cada una. Si el documento claramente pertenece a menos de 5 categorías, incluye solo las que apliquen.
+
+CATEGORÍAS DISPONIBLES:
+{categorias_texto}
+
+DOCUMENTO:
+{md_text}
+
+Responde ÚNICAMENTE con un JSON con esta forma exacta, sin texto adicional antes ni después:
+{{
+  "resumen_ejecutivo": "...",
+  "clasificacion_top5": [
+    {{"categoria": "nombre exacto de la lista", "score": 0.0, "justificacion": "..."}}
+  ]
+}}"""
+
+# Máximo de caracteres del .md que se envía al LLM para resumen/clasificación
+# (documento completo, no por página — límite más alto que la corrección).
+SUMMARY_MAX_INPUT_CHARS = 12000
+
+# Parámetros de generación del LLM de resumen/clasificación (qwen2.5:32b vía Ollama)
+SUMMARY_TEMPERATURE = 0.1
+SUMMARY_MAX_TOKENS = 1024
+SUMMARY_CONTEXT_LENGTH = 8192
+
 # Prompt que envía VisionEngine (minicpm-v) junto con la imagen
 PROMPT_VISION_OCR = (
     "Transcribe todo el texto visible en esta imagen exactamente como aparece. "
