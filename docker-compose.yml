@@ -47,7 +47,11 @@ services:
       dockerfile: Dockerfile
     container_name: ocr-worker
     user: "${UID:-1000}:${GID:-1000}"
-    command: celery -A celery_worker worker --loglevel=info --concurrency=2 -Q ocr --prefetch-multiplier=1 --pool=threads
+    # concurrency=1: con 2, dos documentos cargando modelos OCR a la vez
+    # dejaban a Ollama sin RAM suficiente para qwen2.5:32b (19.85GB) y el
+    # OOM killer mataba el proceso — confirmado en pruebas reales ("signal:
+    # killed"). Más seguro así, aunque procese los documentos uno por uno.
+    command: celery -A celery_worker worker --loglevel=info --concurrency=1 -Q ocr --prefetch-multiplier=1 --pool=threads
     env_file: .env
     environment:
       - REDIS_URL=redis://redis:6379/0
