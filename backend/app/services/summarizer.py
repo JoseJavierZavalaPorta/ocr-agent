@@ -1,3 +1,4 @@
+import asyncio
 import json
 import httpx
 from loguru import logger
@@ -54,7 +55,8 @@ class DocumentSummarizer:
         )
 
         last_error: Exception | None = None
-        for attempt in range(2):
+        max_attempts = 4
+        for attempt in range(max_attempts):
             try:
                 response = await self._client.post(
                     "/api/generate",
@@ -78,7 +80,13 @@ class DocumentSummarizer:
                 raise  # deja que @retry maneje los reintentos de red
             except Exception as e:
                 last_error = e
-                logger.warning(f"Resumen/clasificación intento {attempt + 1} falló: {e}")
+                logger.warning(f"Resumen/clasificación intento {attempt + 1}/{max_attempts} falló: {e}")
+                if attempt < max_attempts - 1:
+                    # Backoff generoso: un 500 de Ollama suele significar que
+                    # está recargando el modelo tras quedarse sin memoria bajo
+                    # carga concurrente con el worker de OCR (visto en pruebas)
+                    # — reintentar de inmediato no sirve de nada.
+                    await asyncio.sleep(20 * (attempt + 1))
 
         raise SummarizerError(f"No se pudo obtener resumen/clasificación válida tras reintentos: {last_error}")
 
