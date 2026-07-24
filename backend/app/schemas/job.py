@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional
-from app.models.job import JobStatus, PageStatus, DocType, OcrEngine
+from app.models.job import JobStatus, PageStatus, DocType, OcrEngine, SummaryStatus
 
 
 class PageSchema(BaseModel):
@@ -42,6 +42,10 @@ class JobSchema(BaseModel):
     avg_confidence: float
     file_size_bytes: int
     error_message: Optional[str]
+    summary_status: SummaryStatus
+    summary_md_path: Optional[str]
+    summary_error: Optional[str]
+    classification_json: Optional[str]
     created_at: datetime
     updated_at: datetime
     completed_at: Optional[datetime]
@@ -58,6 +62,9 @@ class JobSummarySchema(BaseModel):
     processed_pages: int
     avg_confidence: float
     error_message: Optional[str]
+    summary_status: SummaryStatus
+    summary_md_path: Optional[str]
+    summary_error: Optional[str]
     created_at: datetime
     updated_at: datetime
     completed_at: Optional[datetime]
