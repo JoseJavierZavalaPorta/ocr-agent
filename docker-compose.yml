@@ -18,6 +18,11 @@ services:
       - ORIGINALS_PATH=/data/originals
       - MODELS_PATH=/data/models
       - SYSTEM_GPU_NAME=${SYSTEM_GPU_NAME:-}
+      # El backend solo sirve la API — no procesa OCR, así que no debe cargar
+      # Surya/TrOCR/MinerU. Sin esto, la primera llamada a apply_async()
+      # dispara el warm-up igual que en el worker, bloqueando esa petición
+      # ~2-3 min y duplicando esos modelos en RAM sin necesidad.
+      - SKIP_MODEL_WARMUP=1
     volumes:
       - ${INPUT_DIR:-./volumes/input}:/data/input:ro
       - ${OUTPUT_DIR:-./volumes/output}:/data/output
