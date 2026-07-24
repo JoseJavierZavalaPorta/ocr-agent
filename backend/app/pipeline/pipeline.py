@@ -300,7 +300,12 @@ class OCRPipeline:
                     except Exception as e:
                         logger.warning(f"TrOCR fallback falló: {e}")
                 if fallback is None or len(fallback.text.strip()) < VISION_MIN_CHARS:
-                    fallback = self.model_loader.surya.ocr_image(pil_img)
+                    try:
+                        fallback = self.model_loader.surya.ocr_image(pil_img)
+                    except Exception as e:
+                        logger.warning(f"Surya fallback (tras MinerU) falló: {e}")
+                        # conserva lo que ya había en "fallback" (TrOCR corto o None);
+                        # si sigue vacío, la lógica de abajo cae a Tesseract
                 ocr_result = fallback
         else:  # SURYA por defecto
             try:
