@@ -288,10 +288,10 @@ Editar `backend/app/pipeline/constants.py`:
 PROMPT_CORRECTION_HANDWRITING = """..."""
 ```
 
-Luego reconstruir la imagen:
+`constants.py` está montado como volumen (no hace falta reconstruir la imagen, ni tener internet):
 
 ```bash
-docker compose build worker && docker compose up -d worker
+docker compose restart worker summarizer
 ```
 
 ### Quiero ajustar qué instrucción recibe el modelo de visión
@@ -302,7 +302,7 @@ Editar `backend/app/pipeline/constants.py`:
 PROMPT_VISION_OCR = "..."
 ```
 
-Mismo proceso: `docker compose build worker && docker compose up -d worker`.
+Mismo proceso: `docker compose restart worker summarizer`.
 
 ### El sistema detecta manuscrito donde hay texto impreso (o viceversa)
 

@@ -77,6 +77,10 @@ services:
       - ./volumes/originals:/data/originals
       - ./volumes/db:/data/db
       - ./volumes/models:/data/models
+      # Prompts/umbrales/timeouts editables SIN reconstruir la imagen — útil
+      # en el destino sin red: editar el archivo y "docker compose restart
+      # worker summarizer" alcanza, no hace falta rebuild.
+      - ./backend/app/pipeline/constants.py:/app/app/pipeline/constants.py:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -109,6 +113,7 @@ services:
       - ${INPUT_DIR:-./volumes/input}:/data/input:ro
       - ${OUTPUT_DIR:-./volumes/output}:/data/output
       - ./volumes/db:/data/db
+      - ./backend/app/pipeline/constants.py:/app/app/pipeline/constants.py:ro
     depends_on:
       redis:
         condition: service_healthy
