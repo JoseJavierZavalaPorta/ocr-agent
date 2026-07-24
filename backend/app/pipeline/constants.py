@@ -154,8 +154,9 @@ VISION_CONFIDENCE_LOW = 0.30   # cuando el texto extraído es muy corto
 # PARÁMETROS MINERU ENGINE (ocr_engine.py)
 # -----------------------------------------------------------------------------
 
-# Timeout en segundos para la ejecución de magic-pdf CLI
-MINERU_TIMEOUT_SEC = 300
+# Timeout en segundos para la ejecución de magic-pdf CLI. 300s ya tocó el
+# límite en pruebas reales bajo carga concurrente (worker + Ollama a la vez).
+MINERU_TIMEOUT_SEC = 420
 
 # Confianza asignada a resultados de MinerU
 MINERU_CONFIDENCE_OK = 0.85
