@@ -142,7 +142,9 @@ VISION_TEMPERATURE = 0.1
 VISION_MAX_TOKENS = 1024
 
 # Timeout en segundos para la llamada HTTP al VisionEngine
-VISION_TIMEOUT_SEC = 180
+# CPU puro (VisionEngine/minicpm-v vía Ollama) puede tardar varios minutos
+# por página en hardware modesto — 180s se quedaba corto en pruebas reales.
+VISION_TIMEOUT_SEC = 300
 
 # Confianza asignada al resultado de VisionEngine según longitud del texto extraído
 VISION_CONFIDENCE_OK = 0.82    # cuando extrae texto suficiente (> VISION_MIN_CHARS)

@@ -65,8 +65,12 @@ services:
       - TRANSFORMERS_OFFLINE=1
       - SURYA_DEVICE=cpu
       - TROCR_DEVICE=cpu
-      - SURYA_TIMEOUT=60
-      - TROCR_TIMEOUT=120
+      # En CPU pura (sin GPU, o con GPU AMD que solo acelera Ollama — Surya y
+      # TrOCR corren en CPU siempre) una página puede tardar varios minutos.
+      # 60s/120s eran insuficientes en pruebas reales (Surya midió 127s en
+      # una sola página) y hacían caer a Tesseract innecesariamente.
+      - SURYA_TIMEOUT=300
+      - TROCR_TIMEOUT=240
     volumes:
       - ${INPUT_DIR:-./volumes/input}:/data/input:ro
       - ${OUTPUT_DIR:-./volumes/output}:/data/output
