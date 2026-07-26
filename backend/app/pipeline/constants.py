@@ -21,7 +21,7 @@ INSTRUCCIONES:
 1. Elimina artefactos OCR obvios: números aislados sin contexto semántico, símbolos "|" sueltos, cadenas numéricas que claramente son ruido del scanner.
 2. Corrige errores de caracteres usando el contexto de la frase.
 3. Normaliza espaciado y saltos de línea para que el texto sea legible.
-4. Preserva TODOS los datos reales: nombres propios, fechas, números de documento, DNI, códigos, términos legales/médicos/técnicos.
+4. Preserva TODOS los datos reales: nombres propios, fechas, números de documento/acta, códigos, cifras monetarias, términos económicos/institucionales.
 5. Si un fragmento está cortado por el borde del scan, indícalo con [...].
 6. Preserva el formato Markdown existente (encabezados, listas).
 7. Responde ÚNICAMENTE con el texto limpio y normalizado, sin explicaciones.
@@ -31,21 +31,22 @@ TEXTO OCR:
 
 TEXTO NORMALIZADO:"""
 
-PROMPT_CORRECTION_HANDWRITING = """Eres un experto en transcripción de documentos manuscritos en español: recetas médicas, cartas, formularios y actas.
+PROMPT_CORRECTION_HANDWRITING = """Eres un experto en transcripción de actas históricas del Banco Central de Reserva del Perú (BCRP) — actas de Directorio y documentos económicos/financieros, manuscritos o mecanografiados.
 
 Tienes conocimiento de:
-- Medicamentos comunes y sus nombres (Rohypnol, Diazepam, Amoxicilina, Ibuprofeno, etc.)
-- Abreviaturas médicas: Rp. (receta), mg (miligramos), comp./cáp. (comprimidos/cápsulas), c/12hs, VO, IM, EV, Dr., M.P. (matrícula profesional)
-- Formato de receta: paciente, DNI, edad, medicamento, dosis, cantidad, médico, matrícula, fecha
+- Estructura típica de un acta de Directorio del BCRP: fecha y número de sesión/acta, directores y funcionarios presentes (Presidente del Directorio, Gerente General, Directores, Secretario), orden del día, acuerdos adoptados, firmas.
+- Terminología económica y bancaria de la época: tasa de redescuento, tasa de interés, encaje bancario/legal, emisión monetaria, reservas internacionales, tipo de cambio, operaciones de mercado abierto, política monetaria, circulante, cartera de créditos, balance general.
+- Nombres históricos de la moneda peruana según la época del documento — preserva el nombre EXACTO que aparece, no lo "corrijas" a otro: Sol / Libra peruana (hasta ~1930), Sol de Oro (~1930-1985), Inti (1985-1991), Nuevo Sol (1991-2015), Sol (desde 2015).
+- Cifras monetarias, porcentajes, fechas y números de acta/sesión son datos críticos: preservarlos exactamente, sin redondear ni "corregir" su valor.
 
-El OCR de escritura a mano produce errores típicos: letras confundidas (a/u/o, n/u, r/n, l/i, b/h), sílabas transpuestas, palabras cortadas.
+El OCR de escritura a mano o mecanografía antigua produce errores típicos: letras confundidas (a/u/o, n/u, r/n, l/i, b/h), sílabas transpuestas, palabras cortadas.
 
 INSTRUCCIONES:
-1. Usa el contexto del tipo de documento para inferir palabras garbled (ej: en una receta, "Robipinol" → "Rohypnol", "Flunizepamon" → posiblemente un medicamento).
-2. Corrige errores de caracteres usando coherencia semántica y conocimiento médico/documental.
-3. Para nombres propios de pacientes o médicos ilegibles, conserva la mejor aproximación posible.
+1. Usa el contexto económico/institucional para inferir palabras garbled (ej: términos bancarios, nombres de directores, denominación de la moneda vigente en esa época).
+2. Corrige errores de caracteres usando coherencia semántica y conocimiento del dominio económico/bancario — NO asumas contenido médico, legal genérico u otro dominio ajeno a actas de banco central.
+3. Para nombres propios de directores o funcionarios ilegibles, conserva la mejor aproximación posible.
 4. Para fragmentos completamente indescifrables, escribe [ilegible].
-5. Preserva TODOS los números exactamente: DNI, dosis, fechas, matrículas, cantidades.
+5. Preserva TODOS los números exactamente: cifras monetarias, tasas, porcentajes, fechas, números de acta/sesión.
 6. NO inventes datos que no estén presentes en el texto.
 7. Responde ÚNICAMENTE con el texto transcrito y corregido, sin explicaciones ni comentarios.
 
@@ -90,9 +91,10 @@ SUMMARY_CONTEXT_LENGTH = 8192
 # Prompt que envía VisionEngine (minicpm-v) junto con la imagen
 PROMPT_VISION_OCR = (
     "Transcribe todo el texto visible en esta imagen exactamente como aparece. "
-    "Es un documento en español (puede ser una receta médica, carta, formulario, acta, "
-    "censo, padrón, contrato u otro documento histórico o moderno). "
-    "Preserva la estructura: encabezados, campos, líneas. "
+    "Es un acta histórica del Banco Central de Reserva del Perú (BCRP) — un acta de Directorio "
+    "u otro documento económico/financiero, manuscrito o mecanografiado. "
+    "Preserva la estructura: encabezados, fecha, número de acta/sesión, nombres de directores "
+    "o funcionarios, cifras monetarias, acuerdos adoptados. "
     "Para texto manuscrito cursivo, transcríbelo lo mejor posible usando el contexto. "
     "Para fragmentos completamente ilegibles escribe [ilegible]. "
     "Responde ÚNICAMENTE con el texto transcrito, sin explicaciones."
