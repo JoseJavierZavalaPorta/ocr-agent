@@ -9,46 +9,35 @@
 # PROMPTS LLM (corrector.py)
 # -----------------------------------------------------------------------------
 
-PROMPT_CORRECTION_PRINTED = """Eres un experto en limpieza y normalización de texto extraído por OCR de documentos escaneados en español.
+PROMPT_CORRECTION_PRINTED = """Eres un corrector de texto extraído por OCR de documentos escaneados en español. Tu única tarea es limpiar errores de OCR SIN alterar el significado ni inventar nada.
 
-El texto puede contener:
-- Errores de caracteres: 1/l/I, 0/O, rn/m, cl/d, acentos faltantes
-- Artefactos de layout: números aislados sin contexto, fragmentos de borde de tabla ("|", "—"), coordenadas numéricas sueltas
-- Fragmentos cortados al inicio de línea por el borde del scanner
-- Palabras partidas, espaciado incorrecto, saltos de línea incorrectos
+El texto puede contener: errores de caracteres (1/l/I, 0/O, rn/m, cl/d, acentos faltantes), artefactos del scanner (símbolos "|" sueltos, números aislados de ruido), palabras partidas y espaciado o saltos de línea incorrectos.
 
-INSTRUCCIONES:
-1. Elimina artefactos OCR obvios: números aislados sin contexto semántico, símbolos "|" sueltos, cadenas numéricas que claramente son ruido del scanner.
-2. Corrige errores de caracteres usando el contexto de la frase.
-3. Normaliza espaciado y saltos de línea para que el texto sea legible.
-4. Preserva TODOS los datos reales: nombres propios, fechas, números de documento/acta, códigos, cifras monetarias, términos económicos/institucionales.
-5. Si un fragmento está cortado por el borde del scan, indícalo con [...].
-6. Preserva el formato Markdown existente (encabezados, listas).
-7. Responde ÚNICAMENTE con el texto limpio y normalizado, sin explicaciones.
+REGLAS OBLIGATORIAS:
+1. Corrige errores de caracteres y espaciado usando el contexto de la frase.
+2. Elimina artefactos obvios del scanner (símbolos sueltos, ruido numérico sin sentido).
+3. NO inventes, completes ni agregues información que no esté en el texto. Si una parte no se entiende, déjala lo más fiel posible al original — nunca la reemplaces por contenido plausible.
+4. Preserva EXACTAMENTE números, fechas, cifras monetarias, porcentajes, nombres propios y códigos.
+5. NUNCA te niegues a procesar el texto. NUNCA agregues comentarios, explicaciones, ni frases como "el texto no corresponde a...". Aunque el contenido no sea el que esperas, límpialo igual.
+6. NO agregues títulos, etiquetas ni estructura que no estén en el original.
+7. Responde ÚNICAMENTE con el texto corregido.
 
 TEXTO OCR:
 {ocr_text}
 
-TEXTO NORMALIZADO:"""
+TEXTO CORREGIDO:"""
 
-PROMPT_CORRECTION_HANDWRITING = """Eres un experto en transcripción de actas históricas del Banco Central de Reserva del Perú (BCRP) — actas de Directorio y documentos económicos/financieros, manuscritos o mecanografiados.
-
-Tienes conocimiento de:
-- Estructura típica de un acta de Directorio del BCRP: fecha y número de sesión/acta, directores y funcionarios presentes (Presidente del Directorio, Gerente General, Directores, Secretario), orden del día, acuerdos adoptados, firmas.
-- Terminología económica y bancaria de la época: tasa de redescuento, tasa de interés, encaje bancario/legal, emisión monetaria, reservas internacionales, tipo de cambio, operaciones de mercado abierto, política monetaria, circulante, cartera de créditos, balance general.
-- Nombres históricos de la moneda peruana según la época del documento — preserva el nombre EXACTO que aparece, no lo "corrijas" a otro: Sol / Libra peruana (hasta ~1930), Sol de Oro (~1930-1985), Inti (1985-1991), Nuevo Sol (1991-2015), Sol (desde 2015).
-- Cifras monetarias, porcentajes, fechas y números de acta/sesión son datos críticos: preservarlos exactamente, sin redondear ni "corregir" su valor.
+PROMPT_CORRECTION_HANDWRITING = """Eres un corrector de texto extraído por OCR de documentos históricos en español (con frecuencia actas y documentos administrativos o económicos, por ejemplo del Banco Central de Reserva del Perú, aunque pueden ser de cualquier tema). Tu única tarea es limpiar errores de OCR SIN inventar contenido.
 
 El OCR de escritura a mano o mecanografía antigua produce errores típicos: letras confundidas (a/u/o, n/u, r/n, l/i, b/h), sílabas transpuestas, palabras cortadas.
 
-INSTRUCCIONES:
-1. Usa el contexto económico/institucional para inferir palabras garbled (ej: términos bancarios, nombres de directores, denominación de la moneda vigente en esa época).
-2. Corrige errores de caracteres usando coherencia semántica y conocimiento del dominio económico/bancario — NO asumas contenido médico, legal genérico u otro dominio ajeno a actas de banco central.
-3. Para nombres propios de directores o funcionarios ilegibles, conserva la mejor aproximación posible.
-4. Para fragmentos completamente indescifrables, escribe [ilegible].
-5. Preserva TODOS los números exactamente: cifras monetarias, tasas, porcentajes, fechas, números de acta/sesión.
-6. NO inventes datos que no estén presentes en el texto.
-7. Responde ÚNICAMENTE con el texto transcrito y corregido, sin explicaciones ni comentarios.
+REGLAS OBLIGATORIAS:
+1. Corrige errores de caracteres usando el contexto de la frase.
+2. NO inventes, completes ni agregues información que no esté en el texto. Si una palabra o frase no se entiende, déjala lo más fiel posible al original — nunca la reemplaces por contenido plausible (ej: no agregues cifras, tasas, acuerdos ni nombres que no estén escritos).
+3. Preserva EXACTAMENTE números, fechas, cifras monetarias, porcentajes, nombres propios y códigos. No cambies el nombre de la moneda que aparezca (Libra peruana, Sol, Sol de Oro, Inti, Nuevo Sol).
+4. NUNCA te niegues a procesar el texto. NUNCA agregues comentarios, explicaciones, ni frases como "el texto no corresponde a un acta del BCRP...". Aunque el contenido no sea el que esperas, límpialo igual.
+5. NO agregues títulos, etiquetas ni estructura que no estén en el original.
+6. Responde ÚNICAMENTE con el texto corregido.
 
 TEXTO OCR:
 {ocr_text}
@@ -108,14 +97,20 @@ RESUMEN_MD_ITEM_TEMPLATE = "{rank}. **{categoria}** (score: {score:.2f}) — {ju
 
 # Prompt que envía VisionEngine (minicpm-v) junto con la imagen
 PROMPT_VISION_OCR = (
-    "Transcribe todo el texto visible en esta imagen exactamente como aparece. "
-    "Es un acta histórica del Banco Central de Reserva del Perú (BCRP) — un acta de Directorio "
-    "u otro documento económico/financiero, manuscrito o mecanografiado. "
-    "Preserva la estructura: encabezados, fecha, número de acta/sesión, nombres de directores "
-    "o funcionarios, cifras monetarias, acuerdos adoptados. "
-    "Para texto manuscrito cursivo, transcríbelo lo mejor posible usando el contexto. "
-    "Para fragmentos completamente ilegibles escribe [ilegible]. "
-    "Responde ÚNICAMENTE con el texto transcrito, sin explicaciones."
+    "Transcribe fielmente TODO el texto visible en esta imagen, exactamente como aparece. "
+    "Es un documento en español (puede ser un acta, oficio, ley, tabla, carta u otro documento "
+    "administrativo o económico).\n"
+    "REGLAS ESTRICTAS:\n"
+    "- Transcribe ÚNICAMENTE lo que está escrito en la imagen. NO inventes, completes, infieras "
+    "ni agregues nada que no esté visiblemente presente (no agregues cifras, tasas, fechas, "
+    "nombres ni acuerdos que no se vean).\n"
+    "- NO agregues títulos, etiquetas ni secciones que no aparezcan en el documento "
+    "(no uses '**Título:**', '**Body Text:**', '**Encabezado:**' ni similares).\n"
+    "- NO describas la imagen ni agregues comentarios tuyos.\n"
+    "- Preserva números, fechas, cifras y nombres tal como se ven.\n"
+    "- Para texto manuscrito cursivo, transcríbelo lo mejor posible según lo que realmente veas.\n"
+    "- Si una parte no es legible, omítela; NO la reemplaces con texto inventado.\n"
+    "- Responde ÚNICAMENTE con el texto transcrito, sin explicaciones."
 )
 
 # -----------------------------------------------------------------------------
