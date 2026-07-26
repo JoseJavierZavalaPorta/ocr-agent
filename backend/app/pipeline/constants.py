@@ -152,9 +152,12 @@ LLM_CONTEXT_LENGTH = 4096
 # Calidad JPEG al enviar imagen a VisionEngine (0-100)
 VISION_JPEG_QUALITY = 92
 
-# Parámetros de generación del modelo Vision (minicpm-v vía Ollama)
+# Parámetros de generación del modelo Vision (qwen2.5vl vía Ollama)
 VISION_TEMPERATURE = 0.1
-VISION_MAX_TOKENS = 1024
+# Tope de salida por página. 1024 (~750 palabras) truncaba páginas densas de
+# texto (una página muy cargada puede pasar de 1000 palabras). 3072 da margen
+# para transcribir una página completa sin cortarla.
+VISION_MAX_TOKENS = 3072
 
 # Timeout en segundos para la llamada HTTP al VisionEngine
 # CPU puro (VisionEngine/minicpm-v vía Ollama) puede tardar varios minutos

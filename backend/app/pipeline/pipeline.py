@@ -412,13 +412,12 @@ class OCRPipeline:
             num = page.page_number + 1
             engine = _engine_label.get(page.ocr_engine, "?")
             conf = f"{page.confidence:.0%}" if page.confidence else "—"
-            icon = _status_icon.get(page.status, "⚠️")
 
-            md_parts.append(f"\n\n---\n\n")
-            md_parts.append(
-                f"<!-- pág. {num}/{job.total_pages} | motor: {engine} | "
-                f"confianza: {conf} | {icon} -->\n\n"
-            )
+            # Separador de página limpio y visible. La metadata detallada
+            # (motor, confianza por página) vive en el _reporte.txt, no aquí,
+            # para mantener el MD legible.
+            md_parts.append("\n\n---\n\n")
+            md_parts.append(f"**Página {num} de {job.total_pages}**\n\n")
 
             text = page.corrected_text or page.raw_ocr_text or ""
             if text.strip():
