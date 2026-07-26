@@ -69,13 +69,16 @@ Responde ÚNICAMENTE con un JSON con esta forma exacta, sin texto adicional ante
 }}"""
 
 # Máximo de caracteres del .md que se envía al LLM para resumen/clasificación
-# (documento completo, no por página — límite más alto que la corrección).
-SUMMARY_MAX_INPUT_CHARS = 12000
+# (documento COMPLETO). 12000 (~2 páginas) hacía que el resumen ignorara las
+# páginas 3-5 de un acta de 5 páginas. 40000 (~6-7 páginas densas) cubre un
+# acta completa, así el resumen/clasificación considera TODO el documento.
+SUMMARY_MAX_INPUT_CHARS = 40000
 
-# Parámetros de generación del LLM de resumen/clasificación (qwen2.5:32b vía Ollama)
+# Parámetros de generación del LLM de resumen/clasificación (qwen2.5vl:32b)
 SUMMARY_TEMPERATURE = 0.1
 SUMMARY_MAX_TOKENS = 1024
-SUMMARY_CONTEXT_LENGTH = 8192
+# Debe caber la entrada (~10000 tokens de 40000 chars) + salida (1024) → 16384.
+SUMMARY_CONTEXT_LENGTH = 16384
 
 # Plantilla del archivo {stem}_resumen.md (summary_tasks.py).
 # {filename}: nombre del documento original. {resumen}: resumen ejecutivo del LLM.
