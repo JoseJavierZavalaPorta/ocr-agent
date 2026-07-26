@@ -1,6 +1,17 @@
+# Rotación de logs: sin esto, los logs de Docker crecen sin límite y en una
+# corrida de semanas (9k actas) podrían llenar el disco y tumbar el sistema.
+# Ollama es muy verboso — este tope evita ese fallo silencioso. Cada servicio
+# guarda como máximo 5 archivos de 50MB (250MB por servicio).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 services:
   backend:
     image: ocr-agent-backend:offline
+    logging: *default-logging
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -42,6 +53,7 @@ services:
 
   worker:
     image: ocr-agent-backend:offline
+    logging: *default-logging
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -96,6 +108,7 @@ services:
 
   summarizer:
     image: ocr-agent-backend:offline
+    logging: *default-logging
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -127,6 +140,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    logging: *default-logging
     container_name: ocr-redis
     command: redis-server --appendonly yes --appendfilename dump.aof --save 60 1
     volumes:
@@ -143,6 +157,7 @@ services:
     # Para AMD hace falta el tag :rocm — se fija con OLLAMA_IMAGE en .env
     # junto con docker-compose.gpu.yml (ver ese archivo).
     image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    logging: *default-logging
     container_name: ocr-ollama
     ports:
       - "11434:11434"
