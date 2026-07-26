@@ -22,12 +22,14 @@ class Settings(BaseSettings):
     confidence_threshold_warn: float = 0.60
     handwriting_threshold: float = 0.60
     layout_complexity_threshold: float = 0.40
-    pdf_extraction_dpi: int = 200
+    pdf_extraction_dpi: int = 300
     surya_batch_size: int = 8
 
-    # Modelos Ollama
-    ollama_correction_model: str = "qwen2.5:32b"
-    ollama_vision_model: str = "minicpm-v"
+    # Modelos Ollama — por defecto un único VLM (qwen2.5vl:32b) hace OCR de
+    # imágenes, corrección de texto y resumen/clasificación. Se puede separar
+    # vía .env (ej. qwen2.5vl:7b visión + qwen2.5:32b corrección) en GPU chica.
+    ollama_correction_model: str = "qwen2.5vl:32b"
+    ollama_vision_model: str = "qwen2.5vl:32b"
 
     # Celery
     celery_concurrency: int = 2

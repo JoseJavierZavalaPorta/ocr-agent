@@ -304,7 +304,7 @@ class VisionEngine:
 
     _PROMPT = PROMPT_VISION_OCR
 
-    def __init__(self, ollama_url: str, model: str = "qwen2-vl:7b"):
+    def __init__(self, ollama_url: str, model: str = "qwen2.5vl:32b"):
         self.ollama_url = ollama_url.rstrip("/")
         self.model = model
         self._available: Optional[bool] = None
