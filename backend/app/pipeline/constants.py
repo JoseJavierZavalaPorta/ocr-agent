@@ -88,6 +88,24 @@ SUMMARY_TEMPERATURE = 0.1
 SUMMARY_MAX_TOKENS = 1024
 SUMMARY_CONTEXT_LENGTH = 8192
 
+# Plantilla del archivo {stem}_resumen.md (summary_tasks.py).
+# {filename}: nombre del documento original. {resumen}: resumen ejecutivo del LLM.
+# {items}: lista ya formateada de las top-5 categorías (una línea por categoría,
+# usando RESUMEN_MD_ITEM_TEMPLATE de abajo).
+RESUMEN_MD_TEMPLATE = """# Resumen ejecutivo — {filename}
+
+{resumen}
+
+## Clasificación (top 5)
+
+{items}
+"""
+
+# Una línea del listado de categorías dentro de RESUMEN_MD_TEMPLATE.
+# {rank}: 1-5. {categoria}: nombre exacto de categorias.json. {score}: 0.0-1.0.
+# {justificacion}: explicación breve que da el LLM.
+RESUMEN_MD_ITEM_TEMPLATE = "{rank}. **{categoria}** (score: {score:.2f}) — {justificacion}"
+
 # Prompt que envía VisionEngine (minicpm-v) junto con la imagen
 PROMPT_VISION_OCR = (
     "Transcribe todo el texto visible en esta imagen exactamente como aparece. "

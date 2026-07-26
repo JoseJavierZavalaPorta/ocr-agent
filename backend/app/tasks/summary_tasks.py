@@ -17,6 +17,7 @@ from app.services.categories import load_categories, CategoriesConfigError
 from app.services.summarizer import DocumentSummarizer, SummarizerError
 from app.services.excel_report import regenerate_excel
 from app.config import get_settings
+from app.pipeline.constants import RESUMEN_MD_TEMPLATE, RESUMEN_MD_ITEM_TEMPLATE
 
 settings = get_settings()
 
@@ -27,13 +28,15 @@ def _write_summary_md(job_filename: str, resumen: str, top5: list[dict]) -> str:
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / f"{stem}_resumen.md"
 
-    lines = [f"# Resumen ejecutivo — {job_filename}\n", resumen.strip(), "\n\n## Clasificación (top 5)\n"]
-    for rank, item in enumerate(top5, start=1):
-        lines.append(
-            f"{rank}. **{item['categoria']}** (score: {item['score']:.2f}) — {item['justificacion']}"
+    items = "\n".join(
+        RESUMEN_MD_ITEM_TEMPLATE.format(
+            rank=rank, categoria=item["categoria"], score=item["score"], justificacion=item["justificacion"]
         )
+        for rank, item in enumerate(top5, start=1)
+    )
+    content = RESUMEN_MD_TEMPLATE.format(filename=job_filename, resumen=resumen.strip(), items=items)
 
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.write_text(content, encoding="utf-8")
     return str(path)
 
 
