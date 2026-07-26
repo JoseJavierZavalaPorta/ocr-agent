@@ -59,28 +59,48 @@ if ! groups "$REAL_USER" | grep -q docker; then
     info "Usuario '$REAL_USER' agregado al grupo docker (efectivo tras relogin — este script sigue usando root mientras tanto)"
 fi
 
-# ── 2. GPU AMD — ROCm best-effort si /dev/kfd no existe ──────────────────────
-step "Verificando GPU AMD..."
-if [[ -e /dev/kfd ]]; then
+# ── 2. GPU — detecta NVIDIA primero, luego AMD, si no CPU ────────────────────
+step "Verificando GPU..."
+HAS_GPU=0
+GPU_VENDOR=""
+
+if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
+    info "GPU NVIDIA detectada: $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)"
+    if command -v nvidia-ctk &>/dev/null || dpkg -l nvidia-container-toolkit &>/dev/null 2>&1; then
+        info "nvidia-container-toolkit ya instalado"
+    else
+        warn "nvidia-container-toolkit no instalado — intentando instalarlo (necesita red)..."
+        if apt-get install -y nvidia-container-toolkit 2>/dev/null; then
+            nvidia-ctk runtime configure --runtime=docker
+            systemctl restart docker
+            info "nvidia-container-toolkit instalado y configurado"
+        else
+            warn "No se pudo instalar nvidia-container-toolkit (¿sin red y sin paquete local?). El sistema correrá en CPU."
+        fi
+    fi
+    if command -v nvidia-ctk &>/dev/null; then
+        HAS_GPU=1
+        GPU_VENDOR="nvidia"
+    fi
+elif [[ -e /dev/kfd ]]; then
     info "/dev/kfd presente — GPU AMD lista para pasar al contenedor de Ollama"
     HAS_GPU=1
+    GPU_VENDOR="amd"
 elif [[ -d "$DEB_ROCM" ]] && [[ -n "$(ls -A "$DEB_ROCM" 2>/dev/null)" ]]; then
     warn "/dev/kfd no existe — intentando instalar ROCm desde paquetes locales (best-effort)..."
     if apt-get install -y "$DEB_ROCM"/*.deb 2>/dev/null; then
         if [[ -e /dev/kfd ]]; then
             info "ROCm instalado y /dev/kfd disponible"
             HAS_GPU=1
+            GPU_VENDOR="amd"
         else
             warn "ROCm instalado pero /dev/kfd sigue sin aparecer — probablemente falta reiniciar el equipo para cargar el driver amdgpu. Corre este script de nuevo después de reiniciar."
-            HAS_GPU=0
         fi
     else
         warn "No se pudo instalar ROCm desde los paquetes locales. El sistema seguirá funcionando en modo CPU."
-        HAS_GPU=0
     fi
 else
-    warn "/dev/kfd no existe y no hay paquetes ROCm en el bundle — el sistema correrá en CPU (más lento pero funcional)."
-    HAS_GPU=0
+    warn "No se detectó GPU AMD ni NVIDIA — el sistema correrá en CPU (más lento pero funcional)."
 fi
 
 # ── 3. Cargar imágenes Docker ─────────────────────────────────────────────────
@@ -94,16 +114,23 @@ if [[ ! -f .env ]]; then
     cp .env.example .env
     warn ".env creado desde .env.example — ajusta HSA_OVERRIDE_GFX_VERSION si tienes GPU AMD (rocminfo | grep gfx)"
 fi
+if [[ "$GPU_VENDOR" == "amd" ]] && ! grep -q "^OLLAMA_IMAGE=" .env; then
+    echo "OLLAMA_IMAGE=ollama/ollama:rocm" >> .env
+fi
 chown -R "$REAL_USER":"$REAL_USER" "$REPO_DIR" 2>/dev/null || true
 
 mkdir -p volumes/db volumes/output volumes/originals volumes/redis \
          volumes/input volumes/models/ollama volumes/models/huggingface \
          volumes/models/marker volumes/models/mineru volumes/models/torch
 
-# ── 5. Levantar servicios (con o sin override de GPU) ─────────────────────────
+# ── 5. Levantar servicios (con el override de GPU que corresponda) ───────────
 step "Levantando servicios..."
 COMPOSE_ARGS=(-f docker-compose.yml)
-[[ "${HAS_GPU:-0}" == "1" ]] && COMPOSE_ARGS+=(-f docker-compose.gpu.yml)
+if [[ "${HAS_GPU:-0}" == "1" && "$GPU_VENDOR" == "nvidia" ]]; then
+    COMPOSE_ARGS+=(-f docker-compose.gpu-nvidia.yml)
+elif [[ "${HAS_GPU:-0}" == "1" && "$GPU_VENDOR" == "amd" ]]; then
+    COMPOSE_ARGS+=(-f docker-compose.gpu.yml)
+fi
 
 sudo -u "$REAL_USER" docker compose "${COMPOSE_ARGS[@]}" up -d
 info "Servicios levantados"

@@ -1,10 +1,14 @@
 # =============================================================================
-# docker-compose.gpu.yml — Override opcional para pasar la GPU AMD al contenedor
-# de Ollama.
+# docker-compose.gpu.yml — Override para pasar una GPU AMD al contenedor de
+# Ollama (ROCm). Para NVIDIA usar docker-compose.gpu-nvidia.yml en su lugar.
 #
 # Se aplica SOLO si /dev/kfd existe en el host (GPU AMD con driver amdgpu/KFD
 # cargado). Si el host no tiene GPU, docker-compose.yml solo se usa sin este
 # override y Ollama corre en CPU sin fallar por dispositivos inexistentes.
+#
+# También hay que fijar en .env: OLLAMA_IMAGE=ollama/ollama:rocm
+# (docker-compose.yml usa ollama/ollama:latest por defecto, que no trae
+# soporte ROCm — solo CUDA/NVIDIA y CPU).
 #
 # Uso manual:
 #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
@@ -18,3 +22,6 @@ services:
       - /dev/dri:/dev/dri
     group_add:
       - video
+    environment:
+      - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-11.0.0}
+      - ROCR_VISIBLE_DEVICES=${ROCR_VISIBLE_DEVICES:-0}

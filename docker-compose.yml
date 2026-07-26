@@ -139,7 +139,10 @@ services:
     restart: unless-stopped
 
   ollama:
-    image: ollama/ollama:rocm
+    # ollama/ollama:latest ya trae soporte CUDA (NVIDIA) y CPU integrado.
+    # Para AMD hace falta el tag :rocm — se fija con OLLAMA_IMAGE en .env
+    # junto con docker-compose.gpu.yml (ver ese archivo).
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
     container_name: ocr-ollama
     ports:
       - "11434:11434"
@@ -148,12 +151,10 @@ services:
     environment:
       - OLLAMA_KEEP_ALIVE=24h
       - OLLAMA_MAX_LOADED_MODELS=2
-      - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION:-11.0.0}
-      - ROCR_VISIBLE_DEVICES=${ROCR_VISIBLE_DEVICES:-0}
     restart: unless-stopped
     healthcheck:
-      # ollama/ollama:rocm no trae curl instalado — "ollama list" usa el
-      # propio binario del contenedor para verificar que el server responde.
+      # curl no está garantizado en todos los tags de ollama — "ollama list"
+      # usa el propio binario del contenedor para verificar que responde.
       test: ["CMD-SHELL", "ollama list || exit 1"]
       interval: 30s
       timeout: 15s

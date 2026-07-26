@@ -1,0 +1,26 @@
+# =============================================================================
+# docker-compose.gpu-nvidia.yml — Override para pasar una GPU NVIDIA al
+# contenedor de Ollama. Para AMD usar docker-compose.gpu.yml en su lugar.
+#
+# Requiere:
+#   - Driver NVIDIA instalado en el host (nvidia-smi debe funcionar)
+#   - nvidia-container-toolkit instalado y configurado (nvidia-ctk runtime
+#     configure --runtime=docker && systemctl restart docker)
+#
+# ollama/ollama:latest (imagen por defecto en docker-compose.yml) ya trae
+# soporte CUDA integrado — no hace falta un tag especial como con AMD/ROCm.
+#
+# Uso manual:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu-nvidia.yml up -d
+#
+# offline/install-target.sh decide automáticamente si incluir este archivo.
+# =============================================================================
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
