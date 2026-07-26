@@ -137,13 +137,19 @@ MINERU_MIN_REAL_CHARS = 30
 # -----------------------------------------------------------------------------
 
 # Máximo de caracteres del texto OCR que se envía al LLM para corrección.
-LLM_MAX_INPUT_CHARS = 4000
+# 4000 truncaba la ENTRADA en páginas densas (una página cargada puede pasar
+# de 5000-6000 caracteres). 10000 cubre una página completa.
+LLM_MAX_INPUT_CHARS = 10000
 
-# Parámetros de generación del LLM de corrección (qwen2.5:32b vía Ollama)
+# Parámetros de generación del LLM de corrección (qwen2.5vl:32b vía Ollama)
 LLM_TEMPERATURE = 0.1
 LLM_TOP_P = 0.9
-LLM_MAX_TOKENS = 512
-LLM_CONTEXT_LENGTH = 4096
+# 512 tokens (~380 palabras) truncaba la SALIDA: aunque visión leyera la
+# página completa, el corrector la reemitía cortada (ej. una página de ~400
+# palabras se cortaba a media frase). 4096 permite devolver la página entera.
+LLM_MAX_TOKENS = 4096
+# Debe caber entrada (~3300 tokens de 10000 chars) + salida (4096) → 8192.
+LLM_CONTEXT_LENGTH = 8192
 
 # -----------------------------------------------------------------------------
 # PARÁMETROS VISION ENGINE (ocr_engine.py)
