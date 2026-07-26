@@ -61,10 +61,16 @@ if [[ ! -f volumes/db/ocr.db ]]; then
     exit 0
 fi
 
-# ── 3. Reiniciar servicios (sin limpiar BD) ───────────────────────────────────
+# ── 3. Reiniciar servicios (sin limpiar BD, con el override de GPU correcto) ─
 step "Reiniciando servicios..."
 docker compose down --remove-orphans 2>/dev/null || true
-docker compose up -d --remove-orphans --force-recreate
+COMPOSE_ARGS=(-f docker-compose.yml)
+if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
+    COMPOSE_ARGS+=(-f docker-compose.gpu-nvidia.yml)
+elif [[ -e /dev/kfd ]]; then
+    COMPOSE_ARGS+=(-f docker-compose.gpu.yml)
+fi
+docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans --force-recreate
 info "Servicios reiniciados"
 
 # ── 4. Esperar que el backend responda ───────────────────────────────────────

@@ -81,9 +81,17 @@ mkdir -p volumes/db volumes/output volumes/originals volumes/redis \
          volumes/models/ollama volumes/models/huggingface \
          volumes/models/marker volumes/models/mineru volumes/models/torch
 
-# ── 6. Levantar servicios ────────────────────────────────────────────────────
+# ── 6. Levantar servicios (con el override de GPU que corresponda) ──────────
 step "Iniciando servicios (redis, ollama, backend, worker, summarizer)..."
-docker compose up -d --remove-orphans --force-recreate
+COMPOSE_ARGS=(-f docker-compose.yml)
+if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
+    COMPOSE_ARGS+=(-f docker-compose.gpu-nvidia.yml)
+    info "GPU NVIDIA detectada — usando docker-compose.gpu-nvidia.yml"
+elif [[ -e /dev/kfd ]]; then
+    COMPOSE_ARGS+=(-f docker-compose.gpu.yml)
+    info "GPU AMD detectada — usando docker-compose.gpu.yml"
+fi
+docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans --force-recreate
 info "Servicios lanzados"
 
 # ── 7. Esperar que el backend responda ───────────────────────────────────────
